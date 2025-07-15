@@ -24,8 +24,8 @@ type Inventory struct {
 	Transactions []Transaction   // Append-only list of all transactions
 	hooks        []HookFunc
 	logs         []string
-	converter    *UnitConverter
-	currency     *CurrencyConverter
+	Converter    *UnitConverter
+	Currency     *CurrencyConverter
 }
 
 func NewInventory(baseCurrency string) *Inventory {
@@ -34,8 +34,8 @@ func NewInventory(baseCurrency string) *Inventory {
 		Transactions: make([]Transaction, 0),
 		logs:         make([]string, 0),
 		hooks:        make([]HookFunc, 0),
-		converter:    NewUnitConverter(),
-		currency:     NewCurrencyConverter(baseCurrency),
+		Converter:    NewUnitConverter(),
+		Currency:     NewCurrencyConverter(baseCurrency),
 	}
 }
 
@@ -62,7 +62,7 @@ func (inv *Inventory) GetBalances() (map[string]int, error) {
 			// if item.DefaultUnit != "" && item.DefaultUnit != ti.Unit {
 			// 	return stock, fmt.Errorf("unit mismatch: expected %s, got %s", item.DefaultUnit, ti.Unit)
 			// }
-			baseQty := inv.converter.ToBase(ti.ItemID, ti.Unit, ti.Quantity)
+			baseQty := inv.Converter.ToBase(ti.ItemID, ti.Unit, ti.Quantity)
 			switch tx.Type {
 			case TransactionAdd:
 				stock[ti.ItemID] += baseQty
@@ -80,8 +80,8 @@ func (inv *Inventory) GetInventoryValueInBaseCurrency() float64 {
 	total := 0.0
 	for _, tx := range inv.Transactions {
 		for _, ti := range tx.Items {
-			baseQty := inv.converter.ToBase(ti.ItemID, ti.Unit, ti.Quantity)
-			total += float64(baseQty) * inv.currency.ConvertToBase(ti.UnitPrice, ti.Currency)
+			baseQty := inv.Converter.ToBase(ti.ItemID, ti.Unit, ti.Quantity)
+			total += float64(baseQty) * inv.Currency.ConvertToBase(ti.UnitPrice, ti.Currency)
 		}
 	}
 	return total
