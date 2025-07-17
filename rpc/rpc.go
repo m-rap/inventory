@@ -2,8 +2,10 @@ package inventoryrpc
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/binary"
 	"io"
+	"log"
 	"time"
 
 	"inventory"
@@ -63,21 +65,33 @@ func WriteRPCResponse(w io.Writer, resp RPCResponse) error {
 	return err
 }
 
-func HandleRPC(inv *inventory.Inventory, req RPCRequest) (RPCResponse, error) {
+func HandleRPC(invs map[string]*inventory.Inventory, db *sql.DB, req RPCRequest) (RPCResponse, error) {
+	buf := bytes.NewReader(req.Payload)
+	invID, err := readString(buf)
+	if err != nil {
+		return errorResp("missing inventory ID"), nil
+	}
+
+	inv, ok := invs[invID]
+	if !ok {
+		return errorResp("inventory not found"), nil
+	}
+
 	switch req.FuncCode {
 	case RPCAddTransaction:
-		tx, err := decodeTransaction(req.Payload)
+		tx, err := decodeTransaction(buf)
 		if err != nil {
 			return errorResp("invalid transaction payload"), nil
 		}
+		tx.InventoryID = invID
 		inv.AddTransaction(tx.Type, tx.Items, tx.Note)
+		if err := inv.SaveTransactionToDB(db, invID, tx); err != nil {
+			log.Println("DB save error:", err)
+		}
 		return successResp(nil), nil
 
 	case RPCGetBalances:
-		balances, err := inv.GetBalances()
-		if err != nil {
-			return errorResp("encode failed"), nil
-		}
+		balances := inv.GetBalances()
 		data, err := encodeBalances(balances)
 		if err != nil {
 			return errorResp("encode failed"), nil
@@ -98,46 +112,43 @@ func HandleRPC(inv *inventory.Inventory, req RPCRequest) (RPCResponse, error) {
 }
 
 // Binary encoding/decoding helpers (simplified)
-func decodeTransaction(data []byte) (inventory.Transaction, error) {
-	buf := bytes.NewReader(data)
+func decodeTransaction(r io.Reader) (inventory.Transaction, error) {
 	var tx inventory.Transaction
 
-	// Decode fixed fields (for simplicity: assuming ID, Type, Timestamp, Note first)
-	id, err := readString(buf)
+	id, err := readString(r)
 	if err != nil {
 		return tx, err
 	}
 	tx.ID = id
-	if err := binary.Read(buf, binary.LittleEndian, &tx.Type); err != nil {
+	if err := binary.Read(r, binary.LittleEndian, &tx.Type); err != nil {
 		return tx, err
 	}
 	var ts int64
-	if err := binary.Read(buf, binary.LittleEndian, &ts); err != nil {
+	if err := binary.Read(r, binary.LittleEndian, &ts); err != nil {
 		return tx, err
 	}
 	tx.Timestamp = time.Unix(0, ts)
-	note, err := readString(buf)
+	note, err := readString(r)
 	if err != nil {
 		return tx, err
 	}
 	tx.Note = note
 
-	// Read item count
 	var count uint16
-	if err := binary.Read(buf, binary.LittleEndian, &count); err != nil {
+	if err := binary.Read(r, binary.LittleEndian, &count); err != nil {
 		return tx, err
 	}
 
 	tx.Items = make([]inventory.TransactionItem, count)
 	for i := range tx.Items {
-		itemID, _ := readString(buf)
+		itemID, _ := readString(r)
 		var qty, balance int32
 		var price float64
-		unit, _ := readString(buf)
-		currency, _ := readString(buf)
-		binary.Read(buf, binary.LittleEndian, &qty)
-		binary.Read(buf, binary.LittleEndian, &balance)
-		binary.Read(buf, binary.LittleEndian, &price)
+		unit, _ := readString(r)
+		currency, _ := readString(r)
+		binary.Read(r, binary.LittleEndian, &qty)
+		binary.Read(r, binary.LittleEndian, &balance)
+		binary.Read(r, binary.LittleEndian, &price)
 
 		tx.Items[i] = inventory.TransactionItem{
 			ItemID:    itemID,

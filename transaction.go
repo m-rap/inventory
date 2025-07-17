@@ -1,18 +1,14 @@
 package inventory
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-type TransactionType string
-
 const (
-	TransactionAdd    TransactionType = "ADD"
-	TransactionRemove TransactionType = "REMOVE"
-	TransactionAdjust TransactionType = "ADJUST" // for corrections
+	TransactionTypeAdd    = 1
+	TransactionTypeRemove = -1
 )
 
 const (
@@ -23,59 +19,52 @@ const (
 )
 
 type TransactionItem struct {
-	ItemID   string
-	Quantity int
-	Unit     string // e.g., "pcs", "kg", "box"
-	Balance  int    // New: stock level *after* this transaction
+	ItemID      string
+	InventoryID string
+	Quantity    int
+	Unit        string // e.g., "pcs", "kg", "box"
+	Balance     int    // New: stock level *after* this transaction
 
 	UnitPrice float64 // Price per unit in given currency at time of transaction
 	Currency  string  // Currency at the time of transaction
 }
 
 type Transaction struct {
-	ID        string
-	Type      TransactionType
-	Items     []TransactionItem // Now supports multiple items
-	Timestamp time.Time
-	Note      string
+	ID          string
+	InventoryID string
+	Type        int
+	Timestamp   time.Time
+	Items       []TransactionItem
+	Note        string
 }
 
-func (inv *Inventory) AddTransaction(ttype TransactionType, items []TransactionItem, note string) {
-	inv.mu.Lock()
-	defer inv.mu.Unlock()
-
-	currentBalances := inv.GetLastBalances()
-
-	for i := range items {
-		current := currentBalances[items[i].ItemID]
-		switch ttype {
-		case TransactionAdd:
-			items[i].Balance = current + items[i].Quantity
-		case TransactionRemove:
-			items[i].Balance = current - items[i].Quantity
-		case TransactionAdjust:
-			items[i].Balance = current + items[i].Quantity
-		}
-	}
+func (inv *Inventory) AddTransaction(tType int, items []TransactionItem, note string) Transaction {
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
 
 	tx := Transaction{
-		ID:        uuid.New().String(),
-		Type:      ttype,
-		Items:     items,
-		Timestamp: time.Now(),
-		Note:      note,
+		ID:          uuid.New().String(),
+		InventoryID: inv.ID,
+		Type:        tType,
+		Timestamp:   time.Now(),
+		Items:       items,
+		Note:        note,
 	}
+
+	balances := inv.GetBalances()
+	for i := range tx.Items {
+		change := tx.Items[i].Quantity
+		if tx.Type < 0 {
+			change *= -1
+		}
+		tx.Items[i].Balance = balances[tx.Items[i].ItemID] + change
+		balances[tx.Items[i].ItemID] = tx.Items[i].Balance
+	}
+
 	inv.Transactions = append(inv.Transactions, tx)
-
-	var logEntry string
-	for _, ti := range tx.Items {
-		logEntry = fmt.Sprintf("Transaction: %s %d %s of item %s (new balance: %d %s)\n",
-			tx.Type, ti.Quantity, ti.Unit, ti.ItemID, ti.Balance, ti.Unit)
-	}
-	logEntry += fmt.Sprintf("[%s] %s: %s", tx.Timestamp.Format(time.RFC3339), tx.Type, tx.Note)
-	inv.logs = append(inv.logs, logEntry)
-
+	inv.logs = append(inv.logs, "Transaction "+tx.ID+" added")
 	inv.runHooks(tx)
+	return tx
 }
 
 func (inv *Inventory) GetLastBalances() map[string]int {
@@ -100,7 +89,7 @@ func (inv *Inventory) GetBalanceForItem(itemID string) int {
 }
 
 func (inv *Inventory) GetLogs() []string {
-	inv.mu.Lock()
-	defer inv.mu.Unlock()
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
 	return append([]string(nil), inv.logs...) // return a copy
 }

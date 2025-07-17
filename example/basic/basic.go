@@ -21,7 +21,7 @@ func main() {
 	// Optional: add unit conversions
 	inv.Converter.AddRule("A1", "box", 10) // 1 box = 10 pcs
 
-	inv.AddTransaction(inventory.TransactionAdd, []inventory.TransactionItem{
+	inv.AddTransaction(inventory.TransactionTypeAdd, []inventory.TransactionItem{
 		{ItemID: "A1", Quantity: 2, Unit: "box"}, // adds 20 pcs
 		{ItemID: "A1", Quantity: 5, Unit: "pcs"}, // adds 5 pcs
 	}, "Restock with box and pcs")
