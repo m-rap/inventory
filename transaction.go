@@ -53,6 +53,7 @@ func (inv *Inventory) AddTransactionToSub(subID string, tType int, items []Trans
 	if subID != "" {
 		if _, exists := inv.SubInventories[subID]; !exists {
 			inv.SubInventories[subID] = NewInventory(subID)
+			inv.SubInventories[subID].db = inv.db
 		}
 		return inv.SubInventories[subID].AddTransactionToSub("", tType, items, note)
 	}
@@ -80,7 +81,7 @@ func (inv *Inventory) AddTransactionToSub(subID string, tType int, items []Trans
 	inv.logs = append(inv.logs, "Transaction "+tx.ID+" added")
 	inv.runHooks(tx)
 	if inv.db != nil {
-		_ = inv.persistTransaction(tx)
+		_ = inv.persistInventory()
 	}
 	return tx
 }
