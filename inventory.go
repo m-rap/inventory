@@ -126,6 +126,17 @@ func (inv *Inventory) persistInventory() error {
 	return nil
 }
 
+func PersistAllInventories(inventories map[string]*Inventory) error {
+	for _, inv := range inventories {
+		if inv.db != nil {
+			if err := inv.persistInventory(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func LoadInventoriesFromDB(db *sql.DB) (map[string]*Inventory, error) {
 	rows, err := db.Query(`SELECT id FROM inventories`)
 	if err != nil {
