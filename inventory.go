@@ -178,11 +178,20 @@ func (inv *Inventory) runHooks(tx Transaction) {
 
 func (inv *Inventory) GetBalances() map[string]int {
 	balances := make(map[string]int)
-	for _, tx := range inv.Transactions {
-		for _, item := range tx.Items {
-			balances[item.ItemID] = item.Balance
+	seen := make(map[string]bool)
+
+	for i := len(inv.Transactions) - 1; i >= 0; i-- {
+		for _, item := range inv.Transactions[i].Items {
+			if !seen[item.ItemID] {
+				balances[item.ItemID] = item.Balance
+				seen[item.ItemID] = true
+			}
+		}
+		if len(seen) == len(inv.RegisteredItems) {
+			break
 		}
 	}
+
 	return balances
 }
 
