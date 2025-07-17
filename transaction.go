@@ -39,19 +39,37 @@ type Transaction struct {
 }
 
 func (inv *Inventory) AddTransaction(tType int, items []TransactionItem, note string) Transaction {
+	return inv.AddTransactionToSub("", tType, items, note)
+}
+
+func generateID() string {
+	return uuid.New().String()
+}
+
+func (inv *Inventory) AddTransactionToSub(subID string, tType int, items []TransactionItem, note string) Transaction {
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 
+	target := inv
+	inventoryID := inv.ID
+	if subID != "" {
+		if _, exists := inv.SubInventories[subID]; !exists {
+			inv.SubInventories[subID] = NewInventory(subID)
+		}
+		target = inv.SubInventories[subID]
+		inventoryID = subID
+	}
+
 	tx := Transaction{
-		ID:          uuid.New().String(),
-		InventoryID: inv.ID,
+		ID:          generateID(),
+		InventoryID: inventoryID,
 		Type:        tType,
 		Timestamp:   time.Now(),
 		Items:       items,
 		Note:        note,
 	}
 
-	balances := inv.GetBalances()
+	balances := target.GetBalances()
 	for i := range tx.Items {
 		change := tx.Items[i].Quantity
 		if tx.Type < 0 {
@@ -61,9 +79,9 @@ func (inv *Inventory) AddTransaction(tType int, items []TransactionItem, note st
 		balances[tx.Items[i].ItemID] = tx.Items[i].Balance
 	}
 
-	inv.Transactions = append(inv.Transactions, tx)
-	inv.logs = append(inv.logs, "Transaction "+tx.ID+" added")
-	inv.runHooks(tx)
+	target.Transactions = append(target.Transactions, tx)
+	target.logs = append(target.logs, "Transaction "+tx.ID+" added")
+	target.runHooks(tx)
 	return tx
 }
 

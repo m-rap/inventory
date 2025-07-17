@@ -18,14 +18,15 @@ type Item struct {
 type HookFunc func(tx Transaction, inv *Inventory) error
 
 type Inventory struct {
-	mutex        sync.Mutex
-	ID           string
-	Items        map[string]Item // All known items (metadata only)
-	Transactions []Transaction   // Append-only list of all transactions
-	hooks        []HookFunc
-	logs         []string
-	Converter    *UnitConverter
-	Currency     *CurrencyConverter
+	mutex          sync.Mutex
+	ID             string
+	Items          map[string]Item // All known items (metadata only)
+	Transactions   []Transaction   // Append-only list of all transactions
+	hooks          []HookFunc
+	logs           []string
+	Converter      *UnitConverter
+	Currency       *CurrencyConverter
+	SubInventories map[string]*Inventory
 }
 
 type ItemReport struct {
@@ -73,6 +74,31 @@ func (inv *Inventory) GetInventoryValueInBaseCurrency() float64 {
 		}
 	}
 	return total
+}
+
+func (inv *Inventory) RegisterHook(hook HookFunc) {
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+	inv.hooks = append(inv.hooks, hook)
+}
+
+func LowStockAlert(threshold int) HookFunc {
+	return func(tx Transaction, inv *Inventory) error {
+		balances := inv.GetBalances()
+		for _, ti := range tx.Items {
+			if qty := balances[ti.ItemID]; qty < threshold {
+				item := inv.Items[ti.ItemID]
+				fmt.Printf("[ALERT] Low stock: %s (ID: %s) has %d remaining\n", item.Name, item.ID, qty)
+			}
+		}
+		return nil
+	}
+}
+
+func (inv *Inventory) runHooks(tx Transaction) {
+	for _, hook := range inv.hooks {
+		_ = hook(tx, inv) // ignore errors for now
+	}
 }
 
 func (inv *Inventory) GetBalances() map[string]int {
@@ -130,29 +156,4 @@ func (inv *Inventory) AddItems(items []TransactionItem, note string) Transaction
 
 func (inv *Inventory) RemoveItems(items []TransactionItem, note string) Transaction {
 	return inv.AddTransaction(TransactionTypeRemove, items, note)
-}
-
-func (inv *Inventory) RegisterHook(hook HookFunc) {
-	inv.mutex.Lock()
-	defer inv.mutex.Unlock()
-	inv.hooks = append(inv.hooks, hook)
-}
-
-func (inv *Inventory) runHooks(tx Transaction) {
-	for _, hook := range inv.hooks {
-		hook(tx, inv)
-	}
-}
-
-func LowStockAlert(threshold int) HookFunc {
-	return func(tx Transaction, inv *Inventory) error {
-		balances := inv.GetBalances()
-		for _, ti := range tx.Items {
-			if qty := balances[ti.ItemID]; qty < threshold {
-				item := inv.Items[ti.ItemID]
-				fmt.Printf("[ALERT] Low stock: %s (ID: %s) has %d remaining\n", item.Name, item.ID, qty)
-			}
-		}
-		return nil
-	}
 }
