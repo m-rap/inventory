@@ -1,7 +1,6 @@
 package inventory
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -17,82 +16,84 @@ type Item struct {
 
 type HookFunc func(tx Transaction, inv *Inventory) error
 
+type UnitConversionRule struct {
+	From   string
+	To     string
+	Factor float64
+}
+
+type CurrencyConversionRule struct {
+	From string
+	To   string
+	Rate float64
+}
+
 type Inventory struct {
-	mutex          sync.Mutex
 	ID             string
-	Items          map[string]Item // All known items (metadata only)
-	Transactions   []Transaction   // Append-only list of all transactions
-	hooks          []HookFunc
+	Transactions   []Transaction
+	mutex          sync.Mutex
 	logs           []string
-	Converter      *UnitConverter
-	Currency       *CurrencyConverter
+	hooks          []HookFunc
 	SubInventories map[string]*Inventory
+
+	RegisteredItems map[string]Item
+
+	unitConversions     []UnitConversionRule
+	currencyConversions []CurrencyConversionRule
 }
 
-type ItemReport struct {
-	Item     Item
-	Quantity int
-}
-
-type ItemReportFilter struct {
-	ID       string // Exact ID match (optional)
-	Name     string // Contains match (optional)
-	Category string // Exact category match (optional)
-	MinQty   *int   // Optional: Minimum quantity
-	MaxQty   *int   // Optional: Maximum quantity
-}
-
-func NewInventory(baseCurrency string) *Inventory {
+func NewInventory(id string) *Inventory {
 	return &Inventory{
-		Items:        make(map[string]Item),
-		Transactions: make([]Transaction, 0),
-		logs:         make([]string, 0),
-		hooks:        make([]HookFunc, 0),
-		Converter:    NewUnitConverter(),
-		Currency:     NewCurrencyConverter(baseCurrency),
+		ID:                  id,
+		SubInventories:      make(map[string]*Inventory),
+		RegisteredItems:     make(map[string]Item),
+		unitConversions:     []UnitConversionRule{},
+		currencyConversions: []CurrencyConversionRule{},
 	}
 }
 
 func (inv *Inventory) RegisterItem(item Item) {
-	if inv.Items == nil {
-		inv.Items = make(map[string]Item)
-	}
-	inv.Items[item.ID] = item
-}
-
-// Backward-compatible alias
-func (inv *Inventory) GetStockLevels() map[string]int {
-	return inv.GetBalances()
-}
-
-func (inv *Inventory) GetInventoryValueInBaseCurrency() float64 {
-	total := 0.0
-	for _, tx := range inv.Transactions {
-		for _, ti := range tx.Items {
-			baseQty := inv.Converter.ToBase(ti.ItemID, ti.Unit, ti.Quantity)
-			total += float64(baseQty) * inv.Currency.ConvertToBase(ti.UnitPrice, ti.Currency)
-		}
-	}
-	return total
-}
-
-func (inv *Inventory) RegisterHook(hook HookFunc) {
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
-	inv.hooks = append(inv.hooks, hook)
+	inv.RegisteredItems[item.ID] = item
 }
 
-func LowStockAlert(threshold int) HookFunc {
-	return func(tx Transaction, inv *Inventory) error {
-		balances := inv.GetBalances()
-		for _, ti := range tx.Items {
-			if qty := balances[ti.ItemID]; qty < threshold {
-				item := inv.Items[ti.ItemID]
-				fmt.Printf("[ALERT] Low stock: %s (ID: %s) has %d remaining\n", item.Name, item.ID, qty)
-			}
-		}
-		return nil
+func (inv *Inventory) AddUnitConversionRule(from, to string, factor float64) {
+	inv.unitConversions = append(inv.unitConversions, UnitConversionRule{from, to, factor})
+}
+
+func (inv *Inventory) AddCurrencyConversionRule(from, to string, rate float64) {
+	inv.currencyConversions = append(inv.currencyConversions, CurrencyConversionRule{from, to, rate})
+}
+
+func (inv *Inventory) convertUnit(qty int, fromUnit, toUnit string) int {
+	if fromUnit == toUnit {
+		return qty
 	}
+	for _, rule := range inv.unitConversions {
+		if rule.From == fromUnit && rule.To == toUnit {
+			return int(float64(qty) * rule.Factor)
+		}
+		if rule.From == toUnit && rule.To == fromUnit {
+			return int(float64(qty) / rule.Factor)
+		}
+	}
+	return qty // fallback to original if no rule found
+}
+
+func (inv *Inventory) convertCurrency(amount float64, fromCur, toCur string) float64 {
+	if fromCur == toCur {
+		return amount
+	}
+	for _, rule := range inv.currencyConversions {
+		if rule.From == fromCur && rule.To == toCur {
+			return amount * rule.Rate
+		}
+		if rule.From == toCur && rule.To == fromCur {
+			return amount / rule.Rate
+		}
+	}
+	return amount // fallback
 }
 
 func (inv *Inventory) runHooks(tx Transaction) {

@@ -38,12 +38,12 @@ type Transaction struct {
 	Note        string
 }
 
-func (inv *Inventory) AddTransaction(tType int, items []TransactionItem, note string) Transaction {
-	return inv.AddTransactionToSub("", tType, items, note)
-}
-
 func generateID() string {
 	return uuid.New().String()
+}
+
+func (inv *Inventory) AddTransaction(tType int, items []TransactionItem, note string) Transaction {
+	return inv.AddTransactionToSub("", tType, items, note)
 }
 
 func (inv *Inventory) AddTransactionToSub(subID string, tType int, items []TransactionItem, note string) Transaction {
