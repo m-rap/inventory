@@ -50,26 +50,23 @@ func (inv *Inventory) AddTransactionToSub(subID string, tType int, items []Trans
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 
-	target := inv
-	inventoryID := inv.ID
 	if subID != "" {
 		if _, exists := inv.SubInventories[subID]; !exists {
 			inv.SubInventories[subID] = NewInventory(subID)
 		}
-		target = inv.SubInventories[subID]
-		inventoryID = subID
+		return inv.SubInventories[subID].AddTransactionToSub("", tType, items, note)
 	}
 
 	tx := Transaction{
 		ID:          generateID(),
-		InventoryID: inventoryID,
+		InventoryID: inv.ID,
 		Type:        tType,
 		Timestamp:   time.Now(),
 		Items:       items,
 		Note:        note,
 	}
 
-	balances := target.GetBalances()
+	balances := inv.GetBalances()
 	for i := range tx.Items {
 		change := tx.Items[i].Quantity
 		if tx.Type < 0 {
@@ -79,9 +76,12 @@ func (inv *Inventory) AddTransactionToSub(subID string, tType int, items []Trans
 		balances[tx.Items[i].ItemID] = tx.Items[i].Balance
 	}
 
-	target.Transactions = append(target.Transactions, tx)
-	target.logs = append(target.logs, "Transaction "+tx.ID+" added")
-	target.runHooks(tx)
+	inv.Transactions = append(inv.Transactions, tx)
+	inv.logs = append(inv.logs, "Transaction "+tx.ID+" added")
+	inv.runHooks(tx)
+	if inv.db != nil {
+		_ = inv.persistTransaction(tx)
+	}
 	return tx
 }
 

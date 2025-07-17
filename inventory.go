@@ -1,18 +1,9 @@
 package inventory
 
 import (
+	"database/sql"
 	"sync"
 )
-
-type Item struct {
-	ID          string            // Unique identifier
-	Name        string            // Display name
-	Category    string            // Optional grouping
-	Price       float64           // Optional static price
-	Currency    string            // e.g., "USD", "IDR"
-	Metadata    map[string]string // Optional extra fields
-	DefaultUnit string            // Optional: used if not overridden per transaction
-}
 
 type HookFunc func(tx Transaction, inv *Inventory) error
 
@@ -28,6 +19,14 @@ type CurrencyConversionRule struct {
 	Rate float64
 }
 
+type Item struct {
+	ID          string
+	Name        string
+	Description string
+	Unit        string
+	Currency    string
+}
+
 type Inventory struct {
 	ID             string
 	Transactions   []Transaction
@@ -40,6 +39,8 @@ type Inventory struct {
 
 	unitConversions     []UnitConversionRule
 	currencyConversions []CurrencyConversionRule
+
+	db *sql.DB
 }
 
 func NewInventory(id string) *Inventory {

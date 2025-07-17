@@ -11,15 +11,17 @@ func main() {
 	inv.RegisterItem(inventory.Item{
 		ID:          "A1",
 		Name:        "Apple",
-		DefaultUnit: "pcs",
+		Unit:        "pcs",
+		Currency:    "IDR",
+		Description: "",
 	})
 
 	// Optional: add exchange rates
-	inv.Currency.AddRate("USD", 16000)
-	inv.Currency.AddRate("EUR", 17000)
+	inv.AddCurrencyConversionRule("USD", "IDR", 16000)
+	inv.AddCurrencyConversionRule("EUR", "IDR", 17000)
 
 	// Optional: add unit conversions
-	inv.Converter.AddRule("A1", "box", 10) // 1 box = 10 pcs
+	inv.AddUnitConversionRule("box", "pcs", 10) // 1 box = 10 pcs
 
 	inv.AddTransaction(inventory.TransactionTypeAdd, []inventory.TransactionItem{
 		{ItemID: "A1", Quantity: 2, Unit: "box"}, // adds 20 pcs
