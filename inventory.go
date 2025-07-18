@@ -2,7 +2,15 @@ package inventory
 
 import (
 	"database/sql"
+	"fmt"
+	"sort"
 	"sync"
+	"time"
+)
+
+const (
+	TransactionTypeAdd    = 1
+	TransactionTypeRemove = -1
 )
 
 type HookFunc func(tx Transaction, inv *Inventory) error
@@ -39,205 +47,222 @@ type Inventory struct {
 
 	unitConversions     []UnitConversionRule
 	currencyConversions []CurrencyConversionRule
-
-	db *sql.DB
+	db                  *sql.DB
 }
 
-func NewInventory(id string) *Inventory {
-	return &Inventory{
-		ID:                  id,
-		SubInventories:      make(map[string]*Inventory),
-		RegisteredItems:     make(map[string]Item),
-		unitConversions:     []UnitConversionRule{},
-		currencyConversions: []CurrencyConversionRule{},
-	}
+type Transaction struct {
+	ID          string
+	InventoryID string
+	Type        int
+	Timestamp   time.Time
+	Items       []TransactionItem
+	Note        string
+}
+
+type TransactionItem struct {
+	ItemID    string
+	Quantity  int
+	Unit      string
+	Balance   int
+	UnitPrice float64
+	Currency  string
+}
+
+func LoadTransactionsForItems(db *sql.DB, inventoryID string, itemIDs []string) []Transaction {
+	// stub for loading transactions filtered by itemIDs
+	return nil // Replace with actual implementation
 }
 
 func (inv *Inventory) RegisterItem(item Item) {
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	inv.RegisteredItems[item.ID] = item
-	if inv.db != nil {
-		_ = inv.persistInventory()
-	}
+	PersistItem(inv.db, inv.ID, item)
 }
 
-func (inv *Inventory) AddUnitConversionRule(from, to string, factor float64) {
-	inv.unitConversions = append(inv.unitConversions, UnitConversionRule{from, to, factor})
-	if inv.db != nil {
-		_ = inv.persistInventory()
-	}
+func (inv *Inventory) AddTransaction(tx Transaction) {
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+	inv.Transactions = append(inv.Transactions, tx)
+	sort.Slice(inv.Transactions, func(i, j int) bool {
+		return inv.Transactions[i].Timestamp.Before(inv.Transactions[j].Timestamp)
+	})
+	inv.UpdateTransactionBalances([]string{}, tx.Timestamp)
+	PersistInventorySince(inv.db, inv.ID, tx.Timestamp, extractItemIDs(tx))
+	_ = RunHooks(tx, inv)
 }
 
-func (inv *Inventory) AddCurrencyConversionRule(from, to string, rate float64) {
-	inv.currencyConversions = append(inv.currencyConversions, CurrencyConversionRule{from, to, rate})
-	if inv.db != nil {
-		_ = inv.persistInventory()
+func (inv *Inventory) AddTransactionToSub(subID string, tx Transaction) {
+	inv.mutex.Lock()
+	sub, ok := inv.SubInventories[subID]
+	inv.mutex.Unlock()
+	if !ok {
+		return
 	}
+	sub.AddTransaction(tx)
 }
 
-func (inv *Inventory) convertUnit(qty int, fromUnit, toUnit string) int {
-	if fromUnit == toUnit {
-		return qty
+func (inv *Inventory) RemoveItems(items []TransactionItem, note string, timestamp time.Time) {
+	tx := Transaction{
+		ID:          generateUUID(),
+		InventoryID: inv.ID,
+		Type:        TransactionTypeRemove,
+		Timestamp:   timestamp,
+		Items:       items,
+		Note:        note,
 	}
-	for _, rule := range inv.unitConversions {
-		if rule.From == fromUnit && rule.To == toUnit {
-			return int(float64(qty) * rule.Factor)
-		}
-		if rule.From == toUnit && rule.To == fromUnit {
-			return int(float64(qty) / rule.Factor)
-		}
-	}
-	return qty // fallback to original if no rule found
+	inv.AddTransaction(tx)
 }
 
-func (inv *Inventory) convertCurrency(amount float64, fromCur, toCur string) float64 {
-	if fromCur == toCur {
-		return amount
+func (inv *Inventory) AddItems(items []TransactionItem, note string, timestamp time.Time) {
+	tx := Transaction{
+		ID:          generateUUID(),
+		InventoryID: inv.ID,
+		Type:        TransactionTypeAdd,
+		Timestamp:   timestamp,
+		Items:       items,
+		Note:        note,
 	}
-	for _, rule := range inv.currencyConversions {
-		if rule.From == fromCur && rule.To == toCur {
-			return amount * rule.Rate
-		}
-		if rule.From == toCur && rule.To == fromCur {
-			return amount / rule.Rate
-		}
-	}
-	return amount // fallback
-}
-
-func (inv *Inventory) persistInventory() error {
-	_, err := inv.db.Exec(`INSERT OR REPLACE INTO inventories (id) VALUES (?)`, inv.ID)
-	if err != nil {
-		return err
-	}
-	for _, item := range inv.RegisteredItems {
-		_, err := inv.db.Exec(`INSERT OR REPLACE INTO items (id, name, description, unit, currency) VALUES (?, ?, ?, ?, ?)`,
-			item.ID, item.Name, item.Description, item.Unit, item.Currency)
-		if err != nil {
-			return err
-		}
-	}
-	for _, tx := range inv.Transactions {
-		if err := inv.persistTransaction(tx); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func PersistAllInventories(inventories map[string]*Inventory) error {
-	for _, inv := range inventories {
-		if inv.db != nil {
-			if err := inv.persistInventory(); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func LoadInventoriesFromDB(db *sql.DB) (map[string]*Inventory, error) {
-	rows, err := db.Query(`SELECT id FROM inventories`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	inventories := make(map[string]*Inventory)
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		inv := NewInventory(id)
-		inv.db = db
-		// Optionally load items
-		itemRows, err := db.Query(`SELECT id, name, description, unit, currency FROM items`)
-		if err != nil {
-			return nil, err
-		}
-		for itemRows.Next() {
-			var it Item
-			if err := itemRows.Scan(&it.ID, &it.Name, &it.Description, &it.Unit, &it.Currency); err == nil {
-				inv.RegisteredItems[it.ID] = it
-			}
-		}
-		itemRows.Close()
-		// Transactions are loaded in persistTransaction or lazily if needed
-		inventories[id] = inv
-	}
-	return inventories, nil
-}
-
-func (inv *Inventory) runHooks(tx Transaction) {
-	for _, hook := range inv.hooks {
-		_ = hook(tx, inv) // ignore errors for now
-	}
-}
-
-func (inv *Inventory) GetBalances() map[string]int {
-	balances := make(map[string]int)
-	seen := make(map[string]bool)
-
-	for i := len(inv.Transactions) - 1; i >= 0; i-- {
-		for _, item := range inv.Transactions[i].Items {
-			if !seen[item.ItemID] {
-				balances[item.ItemID] = item.Balance
-				seen[item.ItemID] = true
-			}
-		}
-		if len(seen) == len(inv.RegisteredItems) {
-			break
-		}
-	}
-
-	return balances
-}
-
-func (inv *Inventory) GetItemReports(filter func(TransactionItem) bool) []TransactionItem {
-	seen := make(map[string]bool)
-	reports := []TransactionItem{}
-	balances := inv.GetBalances()
-
-	for i := len(inv.Transactions) - 1; i >= 0; i-- {
-		for _, item := range inv.Transactions[i].Items {
-			if seen[item.ItemID] {
-				continue
-			}
-			if filter == nil || filter(item) {
-				item.Balance = balances[item.ItemID]
-				reports = append(reports, item)
-				seen[item.ItemID] = true
-			}
-		}
-	}
-
-	return reports
+	inv.AddTransaction(tx)
 }
 
 func (inv *Inventory) GetTransactionsForItems(itemIDs []string) []Transaction {
-	lookup := make(map[string]bool)
-	for _, id := range itemIDs {
-		lookup[id] = true
-	}
-
-	var result []Transaction
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+	var filtered []Transaction
 	for _, tx := range inv.Transactions {
 		for _, item := range tx.Items {
-			if lookup[item.ItemID] {
-				result = append(result, tx)
+			if contains(itemIDs, item.ItemID) {
+				filtered = append(filtered, tx)
 				break
 			}
 		}
 	}
-	return result
+	return filtered
 }
 
-func (inv *Inventory) AddItems(items []TransactionItem, note string) Transaction {
-	return inv.AddTransaction(TransactionTypeAdd, items, note)
+func (inv *Inventory) GetItemReports() map[string][]TransactionItem {
+	reports := make(map[string][]TransactionItem)
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+	for _, tx := range inv.Transactions {
+		for _, item := range tx.Items {
+			reports[item.ItemID] = append(reports[item.ItemID], item)
+		}
+	}
+	return reports
 }
 
-func (inv *Inventory) RemoveItems(items []TransactionItem, note string) Transaction {
-	return inv.AddTransaction(TransactionTypeRemove, items, note)
+func (inv *Inventory) GetBalances() map[string]int {
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+	balances := make(map[string]int)
+	for _, tx := range inv.Transactions {
+		for _, item := range tx.Items {
+			balances[item.ItemID] = item.Balance
+		}
+	}
+	return balances
+}
+
+func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]int {
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+	balances := make(map[string]int)
+	for _, tx := range inv.Transactions {
+		for _, item := range tx.Items {
+			if contains(itemIDs, item.ItemID) {
+				balances[item.ItemID] = item.Balance
+			}
+		}
+	}
+	return balances
+}
+
+func (inv *Inventory) UpdateTransactionBalances(itemIDs []string, since time.Time) {
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+
+	sort.Slice(inv.Transactions, func(i, j int) bool {
+		return inv.Transactions[i].Timestamp.Before(inv.Transactions[j].Timestamp)
+	})
+
+	balances := make(map[string]int)
+
+	for i := range inv.Transactions {
+		tx := &inv.Transactions[i]
+		if tx.Timestamp.Before(since) {
+			continue
+		}
+		for j := range tx.Items {
+			item := &tx.Items[j]
+			if len(itemIDs) > 0 && !contains(itemIDs, item.ItemID) {
+				continue
+			}
+			bal := balances[item.ItemID]
+			if tx.Type == TransactionTypeAdd {
+				bal += item.Quantity
+			} else if tx.Type == TransactionTypeRemove {
+				bal -= item.Quantity
+			}
+			item.Balance = bal
+			balances[item.ItemID] = bal
+		}
+	}
+}
+
+func (inv *Inventory) AddUnitConversionRule(from, to string, factor float64) {
+	inv.unitConversions = append(inv.unitConversions, UnitConversionRule{From: from, To: to, Factor: factor})
+}
+
+func (inv *Inventory) AddCurrencyConversionRule(from, to string, rate float64) {
+	inv.currencyConversions = append(inv.currencyConversions, CurrencyConversionRule{From: from, To: to, Rate: rate})
+}
+
+func (inv *Inventory) ConvertUnit(from, to string, qty int) int {
+	for _, rule := range inv.unitConversions {
+		if rule.From == from && rule.To == to {
+			return int(float64(qty) * rule.Factor)
+		}
+	}
+	return qty
+}
+
+func (inv *Inventory) ConvertCurrency(from, to string, value float64) float64 {
+	for _, rule := range inv.currencyConversions {
+		if rule.From == from && rule.To == to {
+			return value * rule.Rate
+		}
+	}
+	return value
+}
+
+func RunHooks(tx Transaction, inv *Inventory) error {
+	for _, hook := range inv.hooks {
+		if err := hook(tx, inv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func extractItemIDs(tx Transaction) []string {
+	ids := make([]string, 0, len(tx.Items))
+	for _, item := range tx.Items {
+		ids = append(ids, item.ItemID)
+	}
+	return ids
+}
+
+func generateUUID() string {
+	return fmt.Sprintf("%d", time.Now().UnixNano())
+}
+
+func contains(slice []string, val string) bool {
+	for _, item := range slice {
+		if item == val {
+			return true
+		}
+	}
+	return false
 }
