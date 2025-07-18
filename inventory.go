@@ -68,11 +68,6 @@ type TransactionItem struct {
 	Currency  string
 }
 
-func LoadTransactionsForItems(db *sql.DB, inventoryID string, itemIDs []string) []Transaction {
-	// stub for loading transactions filtered by itemIDs
-	return nil // Replace with actual implementation
-}
-
 func (inv *Inventory) RegisterItem(item Item) {
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()

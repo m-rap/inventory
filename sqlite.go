@@ -3,23 +3,28 @@ package inventory
 import (
 	"database/sql"
 	"time"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
-func (inv *Inventory) WithSQLite(path string) error {
+func WithSqlite(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	inv.db = db
-	return inv.initSchema()
+	if err := InitSchema(db); err != nil {
+		return nil, err
+	}
+	return db, nil
 }
 
-func (inv *Inventory) initSchema() error {
-	queries := []string{
-		`CREATE TABLE IF NOT EXISTS inventories (
-			id TEXT PRIMARY KEY
+func InitSchema(db *sql.DB) error {
+	schema := []string{
+		`CREATE TABLE IF NOT EXISTS items (
+			id TEXT PRIMARY KEY,
+			inventory_id TEXT,
+			name TEXT,
+			description TEXT,
+			unit TEXT,
+			currency TEXT
 		);`,
 		`CREATE TABLE IF NOT EXISTS transactions (
 			id TEXT PRIMARY KEY,
@@ -38,8 +43,8 @@ func (inv *Inventory) initSchema() error {
 			currency TEXT
 		);`,
 	}
-	for _, q := range queries {
-		if _, err := inv.db.Exec(q); err != nil {
+	for _, stmt := range schema {
+		if _, err := db.Exec(stmt); err != nil {
 			return err
 		}
 	}
@@ -89,4 +94,70 @@ func PersistAllInventories(inventories map[string]*Inventory) {
 	for _, inv := range inventories {
 		PersistInventory(inv.db, inv)
 	}
+}
+
+func LoadTransactionsForItems(db *sql.DB, inventoryID string, itemIDs []string) []Transaction {
+	if len(itemIDs) == 0 {
+		return nil
+	}
+
+	query := `
+		SELECT DISTINCT t.id, t.inventory_id, t.type, t.timestamp, t.note
+		FROM transactions t
+		JOIN transaction_items ti ON t.id = ti.transaction_id
+		WHERE t.inventory_id = ? AND ti.item_id IN (` + placeholders(len(itemIDs)) + `)
+		ORDER BY t.timestamp`
+
+	args := []interface{}{inventoryID}
+	for _, id := range itemIDs {
+		args = append(args, id)
+	}
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var transactions []Transaction
+	for rows.Next() {
+		var tx Transaction
+		var ts string
+		if err := rows.Scan(&tx.ID, &tx.InventoryID, &tx.Type, &ts, &tx.Note); err != nil {
+			continue
+		}
+		tx.Timestamp, _ = time.Parse(time.RFC3339Nano, ts)
+		tx.Items = loadTransactionItems(db, tx.ID)
+		transactions = append(transactions, tx)
+	}
+	return transactions
+}
+
+func loadTransactionItems(db *sql.DB, txID string) []TransactionItem {
+	rows, err := db.Query(`
+		SELECT item_id, quantity, unit, balance, unit_price, currency
+		FROM transaction_items WHERE transaction_id = ?`, txID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var items []TransactionItem
+	for rows.Next() {
+		var item TransactionItem
+		_ = rows.Scan(&item.ItemID, &item.Quantity, &item.Unit, &item.Balance, &item.UnitPrice, &item.Currency)
+		items = append(items, item)
+	}
+	return items
+}
+
+func placeholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	s := "?"
+	for i := 1; i < n; i++ {
+		s += ",?"
+	}
+	return s
 }
