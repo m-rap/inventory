@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"io"
-	"log"
 	"time"
 
 	"inventory"
@@ -84,10 +83,7 @@ func HandleRPC(invs map[string]*inventory.Inventory, db *sql.DB, req RPCRequest)
 			return errorResp("invalid transaction payload"), nil
 		}
 		tx.InventoryID = invID
-		inv.AddTransaction(tx.Type, tx.Items, tx.Note)
-		if err := inv.SaveTransactionToDB(db, invID, tx); err != nil {
-			log.Println("DB save error:", err)
-		}
+		inv.AddTransaction(tx)
 		return successResp(nil), nil
 
 	case RPCGetBalances:
@@ -98,13 +94,13 @@ func HandleRPC(invs map[string]*inventory.Inventory, db *sql.DB, req RPCRequest)
 		}
 		return successResp(data), nil
 
-	case RPCGetLogs:
-		logs := inv.GetLogs()
-		data, err := encodeLogs(logs)
-		if err != nil {
-			return errorResp("encode failed"), nil
-		}
-		return successResp(data), nil
+	// case RPCGetLogs:
+	// 	logs := inv.GetLogs()
+	// 	data, err := encodeLogs(logs)
+	// 	if err != nil {
+	// 		return errorResp("encode failed"), nil
+	// 	}
+	// 	return successResp(data), nil
 
 	default:
 		return errorResp("unknown function"), nil
