@@ -15,18 +15,6 @@ const (
 
 type HookFunc func(tx Transaction, inv *Inventory) error
 
-type UnitConversionRule struct {
-	From   string
-	To     string
-	Factor float64
-}
-
-type CurrencyConversionRule struct {
-	From string
-	To   string
-	Rate float64
-}
-
 type Item struct {
 	ID          string
 	Name        string
@@ -37,6 +25,7 @@ type Item struct {
 
 type Inventory struct {
 	ID             string
+	ParentID       string
 	Transactions   []Transaction
 	mutex          sync.Mutex
 	logs           []string
@@ -44,10 +33,7 @@ type Inventory struct {
 	SubInventories map[string]*Inventory
 
 	RegisteredItems map[string]Item
-
-	unitConversions     []UnitConversionRule
-	currencyConversions []CurrencyConversionRule
-	db                  *sql.DB
+	db              *sql.DB
 }
 
 type Transaction struct {
@@ -68,7 +54,16 @@ type TransactionItem struct {
 	Currency  string
 }
 
+func NewInventory(id string) *Inventory {
+	return &Inventory{
+		ID:              id,
+		SubInventories:  make(map[string]*Inventory),
+		RegisteredItems: make(map[string]Item),
+	}
+}
+
 func (inv *Inventory) RegisterItem(item Item) {
+	inv.loadFromPersistence()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	inv.RegisteredItems[item.ID] = item
@@ -76,6 +71,7 @@ func (inv *Inventory) RegisterItem(item Item) {
 }
 
 func (inv *Inventory) AddTransaction(tx Transaction) {
+	inv.loadFromPersistence()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	inv.Transactions = append(inv.Transactions, tx)
@@ -88,6 +84,7 @@ func (inv *Inventory) AddTransaction(tx Transaction) {
 }
 
 func (inv *Inventory) AddTransactionToSub(subID string, tx Transaction) {
+	inv.loadFromPersistence()
 	inv.mutex.Lock()
 	sub, ok := inv.SubInventories[subID]
 	inv.mutex.Unlock()
@@ -98,8 +95,9 @@ func (inv *Inventory) AddTransactionToSub(subID string, tx Transaction) {
 }
 
 func (inv *Inventory) RemoveItems(items []TransactionItem, note string, timestamp time.Time) {
+	inv.loadFromPersistence()
 	tx := Transaction{
-		ID:          generateUUID(),
+		ID:          GenerateUUID(),
 		InventoryID: inv.ID,
 		Type:        TransactionTypeRemove,
 		Timestamp:   timestamp,
@@ -110,8 +108,9 @@ func (inv *Inventory) RemoveItems(items []TransactionItem, note string, timestam
 }
 
 func (inv *Inventory) AddItems(items []TransactionItem, note string, timestamp time.Time) {
+	inv.loadFromPersistence()
 	tx := Transaction{
-		ID:          generateUUID(),
+		ID:          GenerateUUID(),
 		InventoryID: inv.ID,
 		Type:        TransactionTypeAdd,
 		Timestamp:   timestamp,
@@ -122,6 +121,7 @@ func (inv *Inventory) AddItems(items []TransactionItem, note string, timestamp t
 }
 
 func (inv *Inventory) GetTransactionsForItems(itemIDs []string) []Transaction {
+	inv.loadFromPersistence()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	var filtered []Transaction
@@ -137,6 +137,7 @@ func (inv *Inventory) GetTransactionsForItems(itemIDs []string) []Transaction {
 }
 
 func (inv *Inventory) GetItemReports() map[string][]TransactionItem {
+	inv.loadFromPersistence()
 	reports := make(map[string][]TransactionItem)
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
@@ -149,6 +150,7 @@ func (inv *Inventory) GetItemReports() map[string][]TransactionItem {
 }
 
 func (inv *Inventory) GetBalances() map[string]int {
+	inv.loadFromPersistence()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	balances := make(map[string]int)
@@ -161,6 +163,7 @@ func (inv *Inventory) GetBalances() map[string]int {
 }
 
 func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]int {
+	inv.loadFromPersistence()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	balances := make(map[string]int)
@@ -175,15 +178,13 @@ func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]int {
 }
 
 func (inv *Inventory) UpdateTransactionBalances(itemIDs []string, since time.Time) {
-	inv.mutex.Lock()
-	defer inv.mutex.Unlock()
-
 	sort.Slice(inv.Transactions, func(i, j int) bool {
 		return inv.Transactions[i].Timestamp.Before(inv.Transactions[j].Timestamp)
 	})
 
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
 	balances := make(map[string]int)
-
 	for i := range inv.Transactions {
 		tx := &inv.Transactions[i]
 		if tx.Timestamp.Before(since) {
@@ -206,30 +207,10 @@ func (inv *Inventory) UpdateTransactionBalances(itemIDs []string, since time.Tim
 	}
 }
 
-func (inv *Inventory) AddUnitConversionRule(from, to string, factor float64) {
-	inv.unitConversions = append(inv.unitConversions, UnitConversionRule{From: from, To: to, Factor: factor})
-}
-
-func (inv *Inventory) AddCurrencyConversionRule(from, to string, rate float64) {
-	inv.currencyConversions = append(inv.currencyConversions, CurrencyConversionRule{From: from, To: to, Rate: rate})
-}
-
-func (inv *Inventory) ConvertUnit(from, to string, qty int) int {
-	for _, rule := range inv.unitConversions {
-		if rule.From == from && rule.To == to {
-			return int(float64(qty) * rule.Factor)
-		}
+func (inv *Inventory) loadFromPersistence() {
+	if inv.db != nil {
+		LoadInventory(inv.db, inv)
 	}
-	return qty
-}
-
-func (inv *Inventory) ConvertCurrency(from, to string, value float64) float64 {
-	for _, rule := range inv.currencyConversions {
-		if rule.From == from && rule.To == to {
-			return value * rule.Rate
-		}
-	}
-	return value
 }
 
 func RunHooks(tx Transaction, inv *Inventory) error {
@@ -249,7 +230,7 @@ func extractItemIDs(tx Transaction) []string {
 	return ids
 }
 
-func generateUUID() string {
+func GenerateUUID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 

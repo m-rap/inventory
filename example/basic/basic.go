@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"inventory"
+	"time"
 )
 
 func main() {
@@ -17,16 +18,35 @@ func main() {
 	})
 
 	// Optional: add exchange rates
-	inv.AddCurrencyConversionRule("USD", "IDR", 16000)
-	inv.AddCurrencyConversionRule("EUR", "IDR", 17000)
+	inventory.AddCurrencyConversionRule(inventory.CurrencyConversionRule{
+		FromCurrency: "USD",
+		ToCurrency:   "IDR",
+		Rate:         16000,
+	})
+	inventory.AddCurrencyConversionRule(inventory.CurrencyConversionRule{
+		FromCurrency: "EUR",
+		ToCurrency:   "IDR",
+		Rate:         17000,
+	})
 
 	// Optional: add unit conversions
-	inv.AddUnitConversionRule("box", "pcs", 10) // 1 box = 10 pcs
+	inventory.AddUnitConversionRule(inventory.UnitConversionRule{
+		FromUnit: "box",
+		ToUnit:   "pcs",
+		Factor:   10,
+	}) // 1 box = 10 pcs
 
-	inv.AddTransaction(inventory.TransactionTypeAdd, []inventory.TransactionItem{
-		{ItemID: "A1", Quantity: 2, Unit: "box"}, // adds 20 pcs
-		{ItemID: "A1", Quantity: 5, Unit: "pcs"}, // adds 5 pcs
-	}, "Restock with box and pcs")
+	inv.AddTransaction(inventory.Transaction{
+		ID:   inventory.GenerateUUID(),
+		Type: inventory.TransactionTypeAdd,
+		Items: []inventory.TransactionItem{
+			{ItemID: "Apple", Quantity: 2, Unit: "box"}, // adds 20 pcs
+			{ItemID: "Apple", Quantity: 5, Unit: "pcs"}, // adds 5 pcs
+		},
+		Note:        "Restock with box and pcs",
+		Timestamp:   time.Now(),
+		InventoryID: inv.ID,
+	})
 
-	fmt.Println("Apple stock:", inv.GetBalanceForItem("A1")) // Output: 25
+	fmt.Println("Apple stock:", inv.GetBalancesForItems([]string{"Apple"})) // Output: 25
 }

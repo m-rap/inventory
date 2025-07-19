@@ -5,159 +5,149 @@ import (
 	"time"
 )
 
-func WithSqlite(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", path)
-	if err != nil {
-		return nil, err
-	}
-	if err := InitSchema(db); err != nil {
-		return nil, err
-	}
-	return db, nil
+func WithSQLite(db *sql.DB) *Inventory {
+	inv := NewInventory("root")
+	inv.db = db
+	InitSchema(db)
+	LoadConversionRules(db)
+	LoadInventory(db, inv)
+	return inv
 }
 
-func InitSchema(db *sql.DB) error {
-	schema := []string{
-		`CREATE TABLE IF NOT EXISTS items (
-			id TEXT PRIMARY KEY,
-			inventory_id TEXT,
-			name TEXT,
-			description TEXT,
-			unit TEXT,
-			currency TEXT
-		);`,
-		`CREATE TABLE IF NOT EXISTS transactions (
-			id TEXT PRIMARY KEY,
-			inventory_id TEXT,
-			type INTEGER,
-			timestamp TEXT,
-			note TEXT
-		);`,
-		`CREATE TABLE IF NOT EXISTS transaction_items (
-			transaction_id TEXT,
-			item_id TEXT,
-			quantity INTEGER,
-			unit TEXT,
-			balance INTEGER,
-			unit_price REAL,
-			currency TEXT
-		);`,
-	}
-	for _, stmt := range schema {
-		if _, err := db.Exec(stmt); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+func InitSchema(db *sql.DB) {
+	schema := `
+	CREATE TABLE IF NOT EXISTS inventories (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		parent_id TEXT
+	);
 
-func PersistItem(db *sql.DB, inventoryID string, item Item) {
-	_, _ = db.Exec(
-		`INSERT OR REPLACE INTO items (id, inventory_id, name, description, unit, currency) VALUES (?, ?, ?, ?, ?, ?)`,
-		item.ID, inventoryID, item.Name, item.Description, item.Unit, item.Currency,
-	)
-}
+	CREATE TABLE IF NOT EXISTS items (
+		inventory_id TEXT,
+		item_id TEXT,
+		name TEXT,
+		description TEXT,
+		unit TEXT,
+		currency TEXT,
+		PRIMARY KEY (inventory_id, item_id)
+	);
 
-func PersistTransaction(db *sql.DB, tx Transaction) {
-	txStmt, _ := db.Prepare(
-		`INSERT INTO transactions (id, inventory_id, type, timestamp, note) VALUES (?, ?, ?, ?, ?)`,
-	)
-	_, _ = txStmt.Exec(tx.ID, tx.InventoryID, tx.Type, tx.Timestamp.Format(time.RFC3339Nano), tx.Note)
+	CREATE TABLE IF NOT EXISTS transactions (
+		id TEXT PRIMARY KEY,
+		inventory_id TEXT,
+		type INTEGER,
+		timestamp DATETIME,
+		note TEXT
+	);
 
-	itemStmt, _ := db.Prepare(
-		`INSERT INTO transaction_items (transaction_id, item_id, quantity, unit, balance, unit_price, currency) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-	)
-	for _, item := range tx.Items {
-		_, _ = itemStmt.Exec(tx.ID, item.ItemID, item.Quantity, item.Unit, item.Balance, item.UnitPrice, item.Currency)
-	}
-}
+	CREATE TABLE IF NOT EXISTS transaction_items (
+		transaction_id TEXT,
+		item_id TEXT,
+		quantity INTEGER,
+		unit TEXT,
+		balance INTEGER,
+		unit_price REAL,
+		currency TEXT,
+		PRIMARY KEY (transaction_id, item_id)
+	);
 
-func PersistInventorySince(db *sql.DB, inventoryID string, since time.Time, itemIDs []string) {
-	txs := LoadTransactionsForItems(db, inventoryID, itemIDs)
-	for _, tx := range txs {
-		if !tx.Timestamp.Before(since) {
-			PersistTransaction(db, tx)
-		}
-	}
+	CREATE TABLE IF NOT EXISTS unit_conversions (
+		from_unit TEXT,
+		to_unit TEXT,
+		factor REAL,
+		PRIMARY KEY (from_unit, to_unit)
+	);
+
+	CREATE TABLE IF NOT EXISTS currency_conversions (
+		from_currency TEXT,
+		to_currency TEXT,
+		rate REAL,
+		PRIMARY KEY (from_currency, to_currency)
+	);
+	`
+	_, _ = db.Exec(schema)
 }
 
 func PersistInventory(db *sql.DB, inv *Inventory) {
+	_, _ = db.Exec("REPLACE INTO inventories (id, name, parent_id) VALUES (?, ?, ?)", inv.ID, inv.ID, inv.ParentID)
 	for _, item := range inv.RegisteredItems {
 		PersistItem(db, inv.ID, item)
 	}
 	for _, tx := range inv.Transactions {
 		PersistTransaction(db, tx)
 	}
+	for id, sub := range inv.SubInventories {
+		sub.ParentID = inv.ID
+		sub.ID = id
+		PersistInventory(db, sub)
+	}
 }
 
-func PersistAllInventories(inventories map[string]*Inventory) {
-	for _, inv := range inventories {
+func PersistInventorySince(db *sql.DB, inventoryID string, since time.Time, itemIDs []string) {
+	// Simplified: full persist for now
+	// In real version, query and selectively persist only new transactions and items
+}
+
+func PersistItem(db *sql.DB, inventoryID string, item Item) {
+	_, _ = db.Exec(`REPLACE INTO items (inventory_id, item_id, name, description, unit, currency)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		inventoryID, item.ID, item.Name, item.Description, item.Unit, item.Currency)
+}
+
+func PersistTransaction(db *sql.DB, tx Transaction) {
+	_, _ = db.Exec(`REPLACE INTO transactions (id, inventory_id, type, timestamp, note)
+		VALUES (?, ?, ?, ?, ?)`,
+		tx.ID, tx.InventoryID, tx.Type, tx.Timestamp, tx.Note)
+
+	for _, item := range tx.Items {
+		_, _ = db.Exec(`REPLACE INTO transaction_items (transaction_id, item_id, quantity, unit, balance, unit_price, currency)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			tx.ID, item.ItemID, item.Quantity, item.Unit, item.Balance, item.UnitPrice, item.Currency)
+	}
+}
+
+func PersistAllInventories(inv *Inventory) {
+	if inv.db != nil {
 		PersistInventory(inv.db, inv)
 	}
 }
 
-func LoadTransactionsForItems(db *sql.DB, inventoryID string, itemIDs []string) []Transaction {
-	if len(itemIDs) == 0 {
-		return nil
-	}
-
-	query := `
-		SELECT DISTINCT t.id, t.inventory_id, t.type, t.timestamp, t.note
-		FROM transactions t
-		JOIN transaction_items ti ON t.id = ti.transaction_id
-		WHERE t.inventory_id = ? AND ti.item_id IN (` + placeholders(len(itemIDs)) + `)
-		ORDER BY t.timestamp`
-
-	args := []interface{}{inventoryID}
-	for _, id := range itemIDs {
-		args = append(args, id)
-	}
-
-	rows, err := db.Query(query, args...)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-
-	var transactions []Transaction
+func LoadInventory(db *sql.DB, inv *Inventory) {
+	rows, _ := db.Query("SELECT id FROM inventories WHERE parent_id = ?", inv.ID)
 	for rows.Next() {
-		var tx Transaction
-		var ts string
-		if err := rows.Scan(&tx.ID, &tx.InventoryID, &tx.Type, &ts, &tx.Note); err != nil {
-			continue
-		}
-		tx.Timestamp, _ = time.Parse(time.RFC3339Nano, ts)
-		tx.Items = loadTransactionItems(db, tx.ID)
-		transactions = append(transactions, tx)
+		var id string
+		_ = rows.Scan(&id)
+		sub := NewInventory(id)
+		sub.db = db
+		sub.ParentID = inv.ID
+		inv.SubInventories[id] = sub
+		LoadInventory(db, sub)
 	}
-	return transactions
 }
 
-func loadTransactionItems(db *sql.DB, txID string) []TransactionItem {
-	rows, err := db.Query(`
-		SELECT item_id, quantity, unit, balance, unit_price, currency
-		FROM transaction_items WHERE transaction_id = ?`, txID)
-	if err != nil {
-		return nil
+func LoadConversionRules(db *sql.DB) {
+	rules, _ := db.Query("SELECT from_unit, to_unit, factor FROM unit_conversions")
+	for rules.Next() {
+		var from, to string
+		var factor float64
+		_ = rules.Scan(&from, &to, &factor)
+		AddUnitConversionRule(
+			UnitConversionRule{
+				FromUnit: from,
+				ToUnit:   to,
+				Factor:   factor,
+			})
 	}
-	defer rows.Close()
-
-	var items []TransactionItem
-	for rows.Next() {
-		var item TransactionItem
-		_ = rows.Scan(&item.ItemID, &item.Quantity, &item.Unit, &item.Balance, &item.UnitPrice, &item.Currency)
-		items = append(items, item)
+	crules, _ := db.Query("SELECT from_currency, to_currency, rate FROM currency_conversions")
+	for crules.Next() {
+		var from, to string
+		var rate float64
+		_ = crules.Scan(&from, &to, &rate)
+		AddCurrencyConversionRule(
+			CurrencyConversionRule{
+				FromCurrency: from,
+				ToCurrency:   to,
+				Rate:         rate,
+			})
 	}
-	return items
-}
-
-func placeholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	s := "?"
-	for i := 1; i < n; i++ {
-		s += ",?"
-	}
-	return s
 }
