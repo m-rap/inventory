@@ -94,6 +94,10 @@ func PersistItem(db *sql.DB, inventoryID string, item Item) {
 		inventoryID, item.ID, item.Name, item.Description, item.Unit, item.Currency)
 }
 
+func DeleteItemFromDB(db *sql.DB, inventoryID, itemID string) {
+	_, _ = db.Exec("DELETE FROM items WHERE inventory_id = ? AND item_id = ?", inventoryID, itemID)
+}
+
 func PersistTransaction(db *sql.DB, tx Transaction) {
 	_, _ = db.Exec(`REPLACE INTO transactions (id, inventory_id, type, timestamp, note)
 		VALUES (?, ?, ?, ?, ?)`,
@@ -104,6 +108,11 @@ func PersistTransaction(db *sql.DB, tx Transaction) {
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			tx.ID, item.ItemID, item.Quantity, item.Unit, item.Balance, item.UnitPrice, item.Currency)
 	}
+}
+
+func DeleteTransactionFromDB(db *sql.DB, transactionID string) {
+	_, _ = db.Exec("DELETE FROM transactions WHERE id = ?", transactionID)
+	_, _ = db.Exec("DELETE FROM transaction_items WHERE transaction_id = ?", transactionID)
 }
 
 func PersistAllInventories(inv *Inventory) {

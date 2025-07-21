@@ -70,6 +70,24 @@ func (inv *Inventory) RegisterItem(item Item) {
 	PersistItem(inv.db, inv.ID, item)
 }
 
+func (inv *Inventory) UpdateItem(item Item) {
+	inv.loadFromPersistence()
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+	if _, exists := inv.RegisteredItems[item.ID]; exists {
+		inv.RegisteredItems[item.ID] = item
+		PersistItem(inv.db, inv.ID, item)
+	}
+}
+
+func (inv *Inventory) DeleteItem(itemID string) {
+	inv.loadFromPersistence()
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+	delete(inv.RegisteredItems, itemID)
+	DeleteItemFromDB(inv.db, inv.ID, itemID)
+}
+
 func (inv *Inventory) AddTransaction(tx Transaction) {
 	inv.loadFromPersistence()
 	inv.mutex.Lock()
@@ -82,6 +100,34 @@ func (inv *Inventory) AddTransaction(tx Transaction) {
 	inv.UpdateTransactionBalances([]string{}, tx.Timestamp)
 	PersistInventorySince(inv.db, inv.ID, tx.Timestamp, extractItemIDs(tx))
 	_ = RunHooks(tx, inv)
+}
+
+func (inv *Inventory) UpdateTransaction(updatedTx Transaction) {
+	inv.loadFromPersistence()
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+	for i, tx := range inv.Transactions {
+		if tx.ID == updatedTx.ID {
+			inv.Transactions[i] = updatedTx
+			inv.UpdateTransactionBalances([]string{}, updatedTx.Timestamp)
+			PersistInventorySince(inv.db, inv.ID, updatedTx.Timestamp, extractItemIDs(updatedTx))
+			return
+		}
+	}
+}
+
+func (inv *Inventory) DeleteTransaction(txID string) {
+	inv.loadFromPersistence()
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+	for i, tx := range inv.Transactions {
+		if tx.ID == txID {
+			inv.Transactions = append(inv.Transactions[:i], inv.Transactions[i+1:]...)
+			inv.UpdateTransactionBalances([]string{}, time.Now())
+			DeleteTransactionFromDB(inv.db, inv.ID, txID)
+			return
+		}
+	}
 }
 
 func (inv *Inventory) AddTransactionToSub(subID string, tx Transaction) {
@@ -165,22 +211,14 @@ func (inv *Inventory) GetBalances() map[string]int {
 
 func (inv *Inventory) GetBalancesRecursive() map[string]int {
 	inv.loadFromPersistence()
-	inv.mutex.Lock()
-	defer inv.mutex.Unlock()
-	balances := make(map[string]int)
-	inv.getBalancesRecursiveHelper(balances)
-	return balances
-}
-
-func (inv *Inventory) getBalancesRecursiveHelper(balances map[string]int) {
-	for _, tx := range inv.Transactions {
-		for _, item := range tx.Items {
-			balances[item.ItemID] = item.Balance
+	balances := inv.GetBalances()
+	for _, sub := range inv.SubInventories {
+		subBalances := sub.GetBalancesRecursive()
+		for k, v := range subBalances {
+			balances[k] += v
 		}
 	}
-	for _, sub := range inv.SubInventories {
-		sub.getBalancesRecursiveHelper(balances)
-	}
+	return balances
 }
 
 func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]int {
