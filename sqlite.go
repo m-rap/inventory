@@ -84,8 +84,35 @@ func PersistInventory(db *sql.DB, inv *Inventory) {
 }
 
 func PersistInventorySince(db *sql.DB, inventoryID string, since time.Time, itemIDs []string) {
-	// Simplified: full persist for now
-	// In real version, query and selectively persist only new transactions and items
+	txRows, _ := db.Query("SELECT id, type, timestamp, note FROM transactions WHERE inventory_id = ? AND timestamp >= ?", inventoryID, since)
+	defer txRows.Close()
+	for txRows.Next() {
+		var tx Transaction
+		tx.InventoryID = inventoryID
+		tx.Items = []TransactionItem{}
+		tx.ID = ""
+		tx.Note = ""
+		var ts time.Time
+		_ = txRows.Scan(&tx.ID, &tx.Type, &ts, &tx.Note)
+		tx.Timestamp = ts
+
+		itemRows, _ := db.Query("SELECT item_id, quantity, unit, balance, unit_price, currency FROM transaction_items WHERE transaction_id = ?", tx.ID)
+		for itemRows.Next() {
+			var item TransactionItem
+			_ = itemRows.Scan(&item.ItemID, &item.Quantity, &item.Unit, &item.Balance, &item.UnitPrice, &item.Currency)
+			tx.Items = append(tx.Items, item)
+		}
+		itemRows.Close()
+		PersistTransaction(db, tx)
+	}
+
+	for _, itemID := range itemIDs {
+		row := db.QueryRow("SELECT name, description, unit, currency FROM items WHERE inventory_id = ? AND item_id = ?", inventoryID, itemID)
+		var item Item
+		item.ID = itemID
+		_ = row.Scan(&item.Name, &item.Description, &item.Unit, &item.Currency)
+		PersistItem(db, inventoryID, item)
+	}
 }
 
 func PersistItem(db *sql.DB, inventoryID string, item Item) {
