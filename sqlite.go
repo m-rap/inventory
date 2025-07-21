@@ -110,9 +110,9 @@ func PersistTransaction(db *sql.DB, tx Transaction) {
 	}
 }
 
-func DeleteTransactionFromDB(db *sql.DB, transactionID string) {
-	_, _ = db.Exec("DELETE FROM transactions WHERE id = ?", transactionID)
-	_, _ = db.Exec("DELETE FROM transaction_items WHERE transaction_id = ?", transactionID)
+func DeleteTransactionFromDB(db *sql.DB, inventoryID, txID string) {
+	_, _ = db.Exec("DELETE FROM transactions WHERE id = ? AND inventory_id = ?", txID, inventoryID)
+	_, _ = db.Exec("DELETE FROM transaction_items WHERE transaction_id = ?", txID)
 }
 
 func PersistAllInventories(inv *Inventory) {
