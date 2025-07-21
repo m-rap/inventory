@@ -14,6 +14,7 @@ const (
 	RPCAddTransaction byte = 1
 	RPCGetBalances    byte = 2
 	RPCGetLogs        byte = 3
+	RPCGetRecursive   byte = 4
 )
 
 type RPCRequest struct {
@@ -88,6 +89,14 @@ func HandleRPC(invs map[string]*inventory.Inventory, db *sql.DB, req RPCRequest)
 
 	case RPCGetBalances:
 		balances := inv.GetBalances()
+		data, err := encodeBalances(balances)
+		if err != nil {
+			return errorResp("encode failed"), nil
+		}
+		return successResp(data), nil
+
+	case RPCGetRecursive:
+		balances := inv.GetBalancesRecursive()
 		data, err := encodeBalances(balances)
 		if err != nil {
 			return errorResp("encode failed"), nil

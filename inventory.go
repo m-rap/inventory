@@ -78,6 +78,7 @@ func (inv *Inventory) AddTransaction(tx Transaction) {
 	sort.Slice(inv.Transactions, func(i, j int) bool {
 		return inv.Transactions[i].Timestamp.Before(inv.Transactions[j].Timestamp)
 	})
+
 	inv.UpdateTransactionBalances([]string{}, tx.Timestamp)
 	PersistInventorySince(inv.db, inv.ID, tx.Timestamp, extractItemIDs(tx))
 	_ = RunHooks(tx, inv)
@@ -160,6 +161,26 @@ func (inv *Inventory) GetBalances() map[string]int {
 		}
 	}
 	return balances
+}
+
+func (inv *Inventory) GetBalancesRecursive() map[string]int {
+	inv.loadFromPersistence()
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+	balances := make(map[string]int)
+	inv.getBalancesRecursiveHelper(balances)
+	return balances
+}
+
+func (inv *Inventory) getBalancesRecursiveHelper(balances map[string]int) {
+	for _, tx := range inv.Transactions {
+		for _, item := range tx.Items {
+			balances[item.ItemID] = item.Balance
+		}
+	}
+	for _, sub := range inv.SubInventories {
+		sub.getBalancesRecursiveHelper(balances)
+	}
 }
 
 func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]int {
