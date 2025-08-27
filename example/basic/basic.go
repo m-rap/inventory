@@ -1,23 +1,36 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"inventory"
 	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
-	inv := inventory.NewInventory("IDR")
+	// Initialize SQLite DB
+	db, err := sql.Open("sqlite3", "file:inventory.db?cache=shared&mode=rwc")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
 
+	// Create inventory bound to SQLite
+	inv := inventory.WithSQLite(db)
+
+	// Register item with generated UUID
+	appleID := inventory.GenerateUUID()
 	inv.RegisterItem(inventory.Item{
-		ID:          "A1",
+		ID:          appleID,
 		Name:        "Apple",
 		Unit:        "pcs",
 		Currency:    "IDR",
 		Description: "",
 	})
 
-	// Optional: add exchange rates
+	// Add exchange rates
 	inventory.AddCurrencyConversionRule(inventory.CurrencyConversionRule{
 		FromCurrency: "USD",
 		ToCurrency:   "IDR",
@@ -29,24 +42,30 @@ func main() {
 		Rate:         17000,
 	})
 
-	// Optional: add unit conversions
+	// Add unit conversions
 	inventory.AddUnitConversionRule(inventory.UnitConversionRule{
 		FromUnit: "box",
 		ToUnit:   "pcs",
 		Factor:   10,
 	}) // 1 box = 10 pcs
 
+	// Add a transaction
 	inv.AddTransaction(inventory.Transaction{
 		ID:   inventory.GenerateUUID(),
 		Type: inventory.TransactionTypeAdd,
 		Items: []inventory.TransactionItem{
-			{ItemID: "Apple", Quantity: 2, Unit: "box"}, // adds 20 pcs
-			{ItemID: "Apple", Quantity: 5, Unit: "pcs"}, // adds 5 pcs
+			{ItemID: appleID, Quantity: 2, Unit: "box"}, // adds 20 pcs
+			{ItemID: appleID, Quantity: 5, Unit: "pcs"}, // adds 5 pcs
 		},
 		Note:        "Restock with box and pcs",
 		Timestamp:   time.Now(),
 		InventoryID: inv.ID,
 	})
 
-	fmt.Println("Apple stock:", inv.GetBalancesForItems([]string{"Apple"})) // Output: 25
+	// Check balance
+	balances := inv.GetBalancesForItems([]string{appleID})
+	appleBalance := balances[appleID]
+	fmt.Printf("Apple stock: %d %s (Value: %.2f %s)\n",
+		appleBalance.Quantity, appleBalance.Unit,
+		appleBalance.Value, appleBalance.Currency)
 }

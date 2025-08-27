@@ -23,6 +23,13 @@ type Item struct {
 	Currency    string
 }
 
+type Balance struct {
+	Quantity int
+	Value    float64
+	Unit     string
+	Currency string
+}
+
 type Inventory struct {
 	ID             string
 	ParentID       string
@@ -97,7 +104,7 @@ func (inv *Inventory) AddTransaction(tx Transaction) {
 		return inv.Transactions[i].Timestamp.Before(inv.Transactions[j].Timestamp)
 	})
 
-	inv.UpdateTransactionBalances([]string{}, tx.Timestamp)
+	inv.updateTransactionBalancesNoLock([]string{}, tx.Timestamp)
 	PersistInventorySince(inv.db, inv.ID, tx.Timestamp, extractItemIDs(tx))
 	_ = RunHooks(tx, inv)
 }
@@ -109,7 +116,7 @@ func (inv *Inventory) UpdateTransaction(updatedTx Transaction) {
 	for i, tx := range inv.Transactions {
 		if tx.ID == updatedTx.ID {
 			inv.Transactions[i] = updatedTx
-			inv.UpdateTransactionBalances([]string{}, updatedTx.Timestamp)
+			inv.updateTransactionBalancesNoLock([]string{}, updatedTx.Timestamp)
 			PersistInventorySince(inv.db, inv.ID, updatedTx.Timestamp, extractItemIDs(updatedTx))
 			return
 		}
@@ -123,7 +130,7 @@ func (inv *Inventory) DeleteTransaction(txID string) {
 	for i, tx := range inv.Transactions {
 		if tx.ID == txID {
 			inv.Transactions = append(inv.Transactions[:i], inv.Transactions[i+1:]...)
-			inv.UpdateTransactionBalances([]string{}, time.Now())
+			inv.updateTransactionBalancesNoLock([]string{}, time.Now())
 			DeleteTransactionFromDB(inv.db, inv.ID, txID)
 			return
 		}
@@ -196,53 +203,102 @@ func (inv *Inventory) GetItemReports() map[string][]TransactionItem {
 	return reports
 }
 
-func (inv *Inventory) GetBalances() map[string]int {
+func normalizeItem(item TransactionItem, base Item) (int, float64) {
+	qty := ConvertUnit(item.Quantity, item.Unit, base.Unit)
+	cost := ConvertCurrency(item.UnitPrice, item.Currency, base.Currency)
+	return qty, cost
+}
+
+func (inv *Inventory) GetBalances() map[string]Balance {
 	inv.loadFromPersistence()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
-	balances := make(map[string]int)
+	balances := make(map[string]Balance)
 	for _, tx := range inv.Transactions {
 		for _, item := range tx.Items {
-			balances[item.ItemID] = item.Balance
+			base, ok := inv.RegisteredItems[item.ItemID]
+			if !ok {
+				continue
+			}
+			qty, cost := normalizeItem(item, base)
+			bal := balances[item.ItemID]
+			if tx.Type == TransactionTypeAdd {
+				bal.Quantity += qty
+				bal.Value += float64(qty) * cost
+			} else if tx.Type == TransactionTypeRemove {
+				bal.Quantity -= qty
+				bal.Value -= float64(qty) * cost
+			}
+			bal.Unit = base.Unit
+			bal.Currency = base.Currency
+			balances[item.ItemID] = bal
 		}
 	}
 	return balances
 }
 
-func (inv *Inventory) GetBalancesRecursive() map[string]int {
+func (inv *Inventory) GetBalancesRecursive() map[string]Balance {
 	inv.loadFromPersistence()
 	balances := inv.GetBalances()
 	for _, sub := range inv.SubInventories {
 		subBalances := sub.GetBalancesRecursive()
 		for k, v := range subBalances {
-			balances[k] += v
+			bal := balances[k]
+			bal.Quantity += v.Quantity
+			bal.Value += v.Value
+			if bal.Unit == "" {
+				bal.Unit = v.Unit
+				bal.Currency = v.Currency
+			}
+			balances[k] = bal
 		}
 	}
 	return balances
 }
 
-func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]int {
+func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]Balance {
 	inv.loadFromPersistence()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
-	balances := make(map[string]int)
+	balances := make(map[string]Balance)
 	for _, tx := range inv.Transactions {
 		for _, item := range tx.Items {
 			if contains(itemIDs, item.ItemID) {
-				balances[item.ItemID] = item.Balance
+				base, ok := inv.RegisteredItems[item.ItemID]
+				if !ok {
+					continue
+				}
+				qty, cost := normalizeItem(item, base)
+				bal := balances[item.ItemID]
+				if tx.Type == TransactionTypeAdd {
+					bal.Quantity += qty
+					bal.Value += float64(qty) * cost
+				} else if tx.Type == TransactionTypeRemove {
+					bal.Quantity -= qty
+					bal.Value -= float64(qty) * cost
+				}
+				bal.Unit = base.Unit
+				bal.Currency = base.Currency
+				balances[item.ItemID] = bal
 			}
 		}
 	}
 	return balances
 }
 
+// Public safe wrapper
 func (inv *Inventory) UpdateTransactionBalances(itemIDs []string, since time.Time) {
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+	inv.updateTransactionBalancesNoLock(itemIDs, since)
+}
+
+// Internal: assumes lock is already held
+func (inv *Inventory) updateTransactionBalancesNoLock(itemIDs []string, since time.Time) {
 	sort.Slice(inv.Transactions, func(i, j int) bool {
 		return inv.Transactions[i].Timestamp.Before(inv.Transactions[j].Timestamp)
 	})
 
-	inv.mutex.Lock()
-	defer inv.mutex.Unlock()
 	balances := make(map[string]int)
 	for i := range inv.Transactions {
 		tx := &inv.Transactions[i]

@@ -168,7 +168,7 @@ func decodeTransaction(r io.Reader) (inventory.Transaction, error) {
 	return tx, nil
 }
 
-func encodeBalances(m map[string]int) ([]byte, error) {
+func encodeBalances(m map[string]inventory.Balance) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	if err := binary.Write(buf, binary.LittleEndian, uint16(len(m))); err != nil {
 		return nil, err
@@ -177,7 +177,16 @@ func encodeBalances(m map[string]int) ([]byte, error) {
 		if err := writeString(buf, k); err != nil {
 			return nil, err
 		}
-		if err := binary.Write(buf, binary.LittleEndian, int32(v)); err != nil {
+		if err := binary.Write(buf, binary.LittleEndian, int32(v.Quantity)); err != nil {
+			return nil, err
+		}
+		if err := binary.Write(buf, binary.LittleEndian, v.Value); err != nil {
+			return nil, err
+		}
+		if err := writeString(buf, v.Unit); err != nil {
+			return nil, err
+		}
+		if err := writeString(buf, v.Currency); err != nil {
 			return nil, err
 		}
 	}
