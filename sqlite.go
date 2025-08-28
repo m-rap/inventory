@@ -2,19 +2,38 @@ package inventory
 
 import (
 	"database/sql"
+	"fmt"
+	"log"
 	"time"
 )
 
-func WithSQLite(db *sql.DB) *Inventory {
-	inv := NewInventory("root")
+const rootInventoryID = "root" // Constant for the root inventory ID
+
+// WithSQLite initializes an Inventory object with the given SQLite database connection.
+func WithSQLite(db *sql.DB) (*Inventory, error) {
+	inv := NewInventory(rootInventoryID)
 	inv.db = db
-	InitSchema(db)
-	LoadConversionRules(db)
-	LoadInventory(db, inv)
-	return inv
+
+	// Initialize the database schema
+	if err := InitSchema(db); err != nil {
+		return nil, fmt.Errorf("failed to initialize schema: %w", err)
+	}
+
+	// Load conversion rules
+	if err := LoadConversionRules(db); err != nil {
+		return nil, fmt.Errorf("failed to load conversion rules: %w", err)
+	}
+
+	// Load inventory data
+	if err := LoadInventory(db, inv); err != nil {
+		return nil, fmt.Errorf("failed to load inventory: %w", err)
+	}
+
+	return inv, nil
 }
 
-func InitSchema(db *sql.DB) {
+// InitSchema creates the necessary database tables if they do not already exist.
+func InitSchema(db *sql.DB) error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS inventories (
 		id TEXT PRIMARY KEY,
@@ -65,7 +84,14 @@ func InitSchema(db *sql.DB) {
 		PRIMARY KEY (from_currency, to_currency)
 	);
 	`
-	_, _ = db.Exec(schema)
+
+	// Execute the schema creation query
+	if _, err := db.Exec(schema); err != nil {
+		return fmt.Errorf("failed to execute schema creation query: %w", err)
+	}
+
+	log.Println("Database schema initialized successfully")
+	return nil
 }
 
 func PersistInventory(db *sql.DB, inv *Inventory) {
@@ -148,25 +174,56 @@ func PersistAllInventories(inv *Inventory) {
 	}
 }
 
-func LoadInventory(db *sql.DB, inv *Inventory) {
-	rows, _ := db.Query("SELECT id FROM inventories WHERE parent_id = ?", inv.ID)
+func LoadInventory(db *sql.DB, inv *Inventory) error {
+	// Query to fetch child inventories based on the parent inventory ID
+	rows, err := db.Query("SELECT id FROM inventories WHERE parent_id = ?", inv.ID)
+	if err != nil {
+		return fmt.Errorf("failed to query child inventories for parent_id %s: %w", inv.ID, err)
+	}
+	defer rows.Close() // Ensure rows are closed after processing
+
 	for rows.Next() {
 		var id string
-		_ = rows.Scan(&id)
+		if err := rows.Scan(&id); err != nil {
+			return fmt.Errorf("failed to scan child inventory: %w", err)
+		}
+
+		// Create a new Inventory object for the child
 		sub := NewInventory(id)
 		sub.db = db
 		sub.ParentID = inv.ID
+
+		// Add the child inventory to the parent inventory's SubInventories map
 		inv.SubInventories[id] = sub
-		LoadInventory(db, sub)
+
+		// Recursively load the children of the current child inventory
+		if err := LoadInventory(db, sub); err != nil {
+			return err
+		}
 	}
+
+	// Check for errors during row iteration
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("error occurred during iteration of child inventories: %w", err)
+	}
+
+	return nil
 }
 
-func LoadConversionRules(db *sql.DB) {
-	rules, _ := db.Query("SELECT from_unit, to_unit, factor FROM unit_conversions")
+func LoadConversionRules(db *sql.DB) error {
+	// Load unit conversion rules
+	rules, err := db.Query("SELECT from_unit, to_unit, factor FROM unit_conversions")
+	if err != nil {
+		return fmt.Errorf("failed to query unit conversion rules: %w", err)
+	}
+	defer rules.Close()
+
 	for rules.Next() {
 		var from, to string
 		var factor float64
-		_ = rules.Scan(&from, &to, &factor)
+		if err := rules.Scan(&from, &to, &factor); err != nil {
+			return fmt.Errorf("failed to scan unit conversion rule: %w", err)
+		}
 		AddUnitConversionRule(
 			UnitConversionRule{
 				FromUnit: from,
@@ -174,11 +231,25 @@ func LoadConversionRules(db *sql.DB) {
 				Factor:   factor,
 			})
 	}
-	crules, _ := db.Query("SELECT from_currency, to_currency, rate FROM currency_conversions")
+
+	// Check for errors during unit conversion rule iteration
+	if err := rules.Err(); err != nil {
+		return fmt.Errorf("error occurred during iteration of unit conversion rules: %w", err)
+	}
+
+	// Load currency conversion rules
+	crules, err := db.Query("SELECT from_currency, to_currency, rate FROM currency_conversions")
+	if err != nil {
+		return fmt.Errorf("failed to query currency conversion rules: %w", err)
+	}
+	defer crules.Close()
+
 	for crules.Next() {
 		var from, to string
 		var rate float64
-		_ = crules.Scan(&from, &to, &rate)
+		if err := crules.Scan(&from, &to, &rate); err != nil {
+			return fmt.Errorf("failed to scan currency conversion rule: %w", err)
+		}
 		AddCurrencyConversionRule(
 			CurrencyConversionRule{
 				FromCurrency: from,
@@ -186,4 +257,11 @@ func LoadConversionRules(db *sql.DB) {
 				Rate:         rate,
 			})
 	}
+
+	// Check for errors during currency conversion rule iteration
+	if err := crules.Err(); err != nil {
+		return fmt.Errorf("error occurred during iteration of currency conversion rules: %w", err)
+	}
+
+	return nil
 }
