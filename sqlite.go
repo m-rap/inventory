@@ -19,6 +19,12 @@ func WithSQLite(db *sql.DB) (*Inventory, error) {
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 
+	// Ensure root inventory is persisted
+	_, err := db.Exec("REPLACE INTO inventories (id, name, parent_id) VALUES (?, ?, ?)", inv.ID, inv.ID, inv.ParentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert root inventory: %w", err)
+	}
+
 	// Load conversion rules
 	if err := LoadConversionRules(db); err != nil {
 		return nil, fmt.Errorf("failed to load conversion rules: %w", err)
@@ -264,4 +270,30 @@ func LoadConversionRules(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+// AddChildInventory creates a new child inventory under the current inventory, persists it, and returns the new inventory.
+func (inv *Inventory) AddChildInventory(childID string) (*Inventory, error) {
+	if inv.db == nil {
+		return nil, fmt.Errorf("inventory is not associated with a database")
+	}
+	if _, exists := inv.SubInventories[childID]; exists {
+		return nil, fmt.Errorf("child inventory with ID %s already exists", childID)
+	}
+
+	child := NewInventory(childID)
+	child.ParentID = inv.ID
+	child.db = inv.db
+
+	// Persist the new child inventory
+	_, err := inv.db.Exec(
+		"REPLACE INTO inventories (id, name, parent_id) VALUES (?, ?, ?)",
+		child.ID, child.ID, child.ParentID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to persist child inventory: %w", err)
+	}
+
+	inv.SubInventories[childID] = child
+	return child, nil
 }

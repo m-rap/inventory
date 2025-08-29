@@ -56,13 +56,35 @@ func main() {
 		Factor:   10,
 	}) // 1 box = 10 pcs
 
+	inv1, err := inv.AddChildInventory("inv1")
+	if err != nil {
+		panic(err)
+	}
+
+	inv2, err := inv.AddChildInventory("inv2")
+	if err != nil {
+		panic(err)
+	}
+
 	// Add a transaction
-	inv.AddTransaction(inventory.Transaction{
+	inv1.AddTransaction(inventory.Transaction{
 		ID:   inventory.GenerateUUID(),
 		Type: inventory.TransactionTypeAdd,
 		Items: []inventory.TransactionItem{
 			{ItemID: appleID, Quantity: 2, Unit: "box"}, // adds 20 pcs
 			{ItemID: appleID, Quantity: 5, Unit: "pcs"}, // adds 5 pcs
+		},
+		Note:      "Restock with box and pcs",
+		Timestamp: time.Now(),
+	})
+
+	// Add a transaction
+	inv2.AddTransaction(inventory.Transaction{
+		ID:   inventory.GenerateUUID(),
+		Type: inventory.TransactionTypeAdd,
+		Items: []inventory.TransactionItem{
+			{ItemID: appleID, Quantity: 1, Unit: "box"}, // adds 10 pcs
+			{ItemID: appleID, Quantity: 3, Unit: "pcs"}, // adds 3 pcs
 		},
 		Note:      "Restock with box and pcs",
 		Timestamp: time.Now(),

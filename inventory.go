@@ -99,6 +99,7 @@ func (inv *Inventory) AddTransaction(tx Transaction) {
 	inv.loadFromPersistence()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
+	tx.InventoryID = inv.ID
 	inv.Transactions = append(inv.Transactions, tx)
 	sort.Slice(inv.Transactions, func(i, j int) bool {
 		return inv.Transactions[i].Timestamp.Before(inv.Transactions[j].Timestamp)
@@ -261,6 +262,7 @@ func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]Balance {
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	balances := make(map[string]Balance)
+	// Calculate balances for current inventory
 	for _, tx := range inv.Transactions {
 		for _, item := range tx.Items {
 			if contains(itemIDs, item.ItemID) {
@@ -281,6 +283,20 @@ func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]Balance {
 				bal.Currency = base.Currency
 				balances[item.ItemID] = bal
 			}
+		}
+	}
+	// Recursively add balances from sub-inventories
+	for _, sub := range inv.SubInventories {
+		subBalances := sub.GetBalancesForItems(itemIDs)
+		for k, v := range subBalances {
+			bal := balances[k]
+			bal.Quantity += v.Quantity
+			bal.Value += v.Value
+			if bal.Unit == "" {
+				bal.Unit = v.Unit
+				bal.Currency = v.Currency
+			}
+			balances[k] = bal
 		}
 	}
 	return balances
