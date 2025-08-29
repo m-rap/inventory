@@ -194,13 +194,21 @@ func LoadInventory(db *sql.DB, inv *Inventory) error {
 			return fmt.Errorf("failed to scan child inventory: %w", err)
 		}
 
-		// Create a new Inventory object for the child
-		sub := NewInventory(id)
-		sub.db = db
-		sub.ParentID = inv.ID
-
-		// Add the child inventory to the parent inventory's SubInventories map
-		inv.SubInventories[id] = sub
+		var sub *Inventory
+		if existing, ok := inv.SubInventories[id]; ok {
+			// Use the existing child inventory
+			sub = existing
+			sub.db = db
+			sub.ParentID = inv.ID
+			sub.Parent = inv
+		} else {
+			// Create a new Inventory object for the child
+			sub = NewInventory(id)
+			sub.db = db
+			sub.ParentID = inv.ID
+			sub.Parent = inv
+			inv.SubInventories[id] = sub
+		}
 
 		// Recursively load the children of the current child inventory
 		if err := LoadInventory(db, sub); err != nil {

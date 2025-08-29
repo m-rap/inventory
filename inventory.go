@@ -33,6 +33,7 @@ type Balance struct {
 type Inventory struct {
 	ID             string
 	ParentID       string
+	Parent         *Inventory // <-- add this line
 	Transactions   []Transaction
 	mutex          sync.Mutex
 	logs           []string
@@ -257,6 +258,17 @@ func (inv *Inventory) GetBalancesRecursive() map[string]Balance {
 	return balances
 }
 
+func (inv *Inventory) getRegisteredItem(itemID string) (Item, bool) {
+	item, ok := inv.RegisteredItems[itemID]
+	if ok {
+		return item, true
+	}
+	if inv.Parent != nil {
+		return inv.Parent.getRegisteredItem(itemID)
+	}
+	return Item{}, false
+}
+
 func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]Balance {
 	inv.loadFromPersistence()
 	inv.mutex.Lock()
@@ -266,7 +278,7 @@ func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]Balance {
 	for _, tx := range inv.Transactions {
 		for _, item := range tx.Items {
 			if contains(itemIDs, item.ItemID) {
-				base, ok := inv.RegisteredItems[item.ItemID]
+				base, ok := inv.getRegisteredItem(item.ItemID)
 				if !ok {
 					continue
 				}
