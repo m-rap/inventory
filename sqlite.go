@@ -48,13 +48,11 @@ func InitSchema(db *sql.DB) error {
 	);
 
 	CREATE TABLE IF NOT EXISTS items (
-		inventory_id TEXT,
-		item_id TEXT,
+		item_id TEXT PRIMARY KEY,
 		name TEXT,
 		description TEXT,
 		unit TEXT,
-		currency TEXT,
-		PRIMARY KEY (inventory_id, item_id)
+		currency TEXT
 	);
 
 	CREATE TABLE IF NOT EXISTS transactions (
@@ -102,9 +100,6 @@ func InitSchema(db *sql.DB) error {
 
 func PersistInventory(db *sql.DB, inv *Inventory) {
 	_, _ = db.Exec("REPLACE INTO inventories (id, name, parent_id) VALUES (?, ?, ?)", inv.ID, inv.ID, inv.ParentID)
-	for _, item := range inv.RegisteredItems {
-		PersistItem(db, inv.ID, item)
-	}
 	for _, tx := range inv.Transactions {
 		PersistTransaction(db, tx)
 	}
@@ -139,22 +134,22 @@ func PersistInventorySince(db *sql.DB, inventoryID string, since time.Time, item
 	}
 
 	for _, itemID := range itemIDs {
-		row := db.QueryRow("SELECT name, description, unit, currency FROM items WHERE inventory_id = ? AND item_id = ?", inventoryID, itemID)
+		row := db.QueryRow("SELECT name, description, unit, currency FROM items WHERE item_id = ?", itemID)
 		var item Item
 		item.ID = itemID
 		_ = row.Scan(&item.Name, &item.Description, &item.Unit, &item.Currency)
-		PersistItem(db, inventoryID, item)
+		PersistItem(db, "", item)
 	}
 }
 
-func PersistItem(db *sql.DB, inventoryID string, item Item) {
-	_, _ = db.Exec(`REPLACE INTO items (inventory_id, item_id, name, description, unit, currency)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		inventoryID, item.ID, item.Name, item.Description, item.Unit, item.Currency)
+func PersistItem(db *sql.DB, _ string, item Item) {
+	_, _ = db.Exec(`REPLACE INTO items (item_id, name, description, unit, currency)
+		VALUES (?, ?, ?, ?, ?)`,
+		item.ID, item.Name, item.Description, item.Unit, item.Currency)
 }
 
-func DeleteItemFromDB(db *sql.DB, inventoryID, itemID string) {
-	_, _ = db.Exec("DELETE FROM items WHERE inventory_id = ? AND item_id = ?", inventoryID, itemID)
+func DeleteItemFromDB(db *sql.DB, _ string, itemID string) {
+	_, _ = db.Exec("DELETE FROM items WHERE item_id = ?", itemID)
 }
 
 func PersistTransaction(db *sql.DB, tx Transaction) {

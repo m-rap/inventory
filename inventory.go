@@ -33,15 +33,14 @@ type Balance struct {
 type Inventory struct {
 	ID             string
 	ParentID       string
-	Parent         *Inventory // <-- add this line
+	Parent         *Inventory
 	Transactions   []Transaction
 	mutex          sync.Mutex
 	logs           []string
 	hooks          []HookFunc
 	SubInventories map[string]*Inventory
 
-	RegisteredItems map[string]Item
-	db              *sql.DB
+	db *sql.DB
 }
 
 type Transaction struct {
@@ -62,38 +61,93 @@ type TransactionItem struct {
 	Currency  string
 }
 
+var (
+	items     = make(map[string]Item) // in-memory global item cache
+	itemsLock sync.RWMutex
+)
+
 func NewInventory(id string) *Inventory {
 	return &Inventory{
-		ID:              id,
-		SubInventories:  make(map[string]*Inventory),
-		RegisteredItems: make(map[string]Item),
+		ID:             id,
+		SubInventories: make(map[string]*Inventory),
 	}
 }
 
-func (inv *Inventory) RegisterItem(item Item) {
-	inv.loadFromPersistence()
-	inv.mutex.Lock()
-	defer inv.mutex.Unlock()
-	inv.RegisteredItems[item.ID] = item
-	PersistItem(inv.db, inv.ID, item)
+// RegisterItem now persists globally, not per-inventory, and updates in-memory cache
+func RegisterItem(db *sql.DB, item Item) {
+	PersistItem(db, "", item)
+	itemsLock.Lock()
+	items[item.ID] = item
+	itemsLock.Unlock()
 }
 
-func (inv *Inventory) UpdateItem(item Item) {
-	inv.loadFromPersistence()
-	inv.mutex.Lock()
-	defer inv.mutex.Unlock()
-	if _, exists := inv.RegisteredItems[item.ID]; exists {
-		inv.RegisteredItems[item.ID] = item
-		PersistItem(inv.db, inv.ID, item)
+// UpdateItem now persists globally, not per-inventory, and updates in-memory cache
+func UpdateItem(db *sql.DB, item Item) {
+	PersistItem(db, "", item)
+	itemsLock.Lock()
+	items[item.ID] = item
+	itemsLock.Unlock()
+}
+
+// DeleteItem now deletes globally, not per-inventory, and removes from in-memory cache
+func DeleteItem(db *sql.DB, itemID string) {
+	DeleteItemFromDB(db, "", itemID)
+	itemsLock.Lock()
+	delete(items, itemID)
+	itemsLock.Unlock()
+}
+
+// GetItem fetches a single item from in-memory cache, falls back to DB if not found
+func GetItem(db *sql.DB, itemID string) (Item, bool) {
+	itemsLock.RLock()
+	item, ok := items[itemID]
+	itemsLock.RUnlock()
+	if ok {
+		return item, true
 	}
+	// Fallback to DB and update cache
+	row := db.QueryRow("SELECT name, description, unit, currency FROM items WHERE item_id = ?", itemID)
+	item = Item{ID: itemID}
+	err := row.Scan(&item.Name, &item.Description, &item.Unit, &item.Currency)
+	if err != nil {
+		return Item{}, false
+	}
+	itemsLock.Lock()
+	items[itemID] = item
+	itemsLock.Unlock()
+	return item, true
 }
 
-func (inv *Inventory) DeleteItem(itemID string) {
-	inv.loadFromPersistence()
-	inv.mutex.Lock()
-	defer inv.mutex.Unlock()
-	delete(inv.RegisteredItems, itemID)
-	DeleteItemFromDB(inv.db, inv.ID, itemID)
+// GetAllItems fetches all items from in-memory cache if populated, otherwise loads from DB
+func GetAllItems(db *sql.DB) ([]Item, error) {
+	itemsLock.RLock()
+	if len(items) > 0 {
+		all := make([]Item, 0, len(items))
+		for _, item := range items {
+			all = append(all, item)
+		}
+		itemsLock.RUnlock()
+		return all, nil
+	}
+	itemsLock.RUnlock()
+
+	rows, err := db.Query("SELECT item_id, name, description, unit, currency FROM items")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var all []Item
+	itemsLock.Lock()
+	defer itemsLock.Unlock()
+	for rows.Next() {
+		var item Item
+		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Unit, &item.Currency); err != nil {
+			return nil, err
+		}
+		items[item.ID] = item
+		all = append(all, item)
+	}
+	return all, nil
 }
 
 func (inv *Inventory) AddTransaction(tx Transaction) {
@@ -218,7 +272,7 @@ func (inv *Inventory) GetBalances() map[string]Balance {
 	balances := make(map[string]Balance)
 	for _, tx := range inv.Transactions {
 		for _, item := range tx.Items {
-			base, ok := inv.RegisteredItems[item.ItemID]
+			base, ok := GetItem(inv.db, item.ItemID)
 			if !ok {
 				continue
 			}
@@ -259,14 +313,11 @@ func (inv *Inventory) GetBalancesRecursive() map[string]Balance {
 }
 
 func (inv *Inventory) getRegisteredItem(itemID string) (Item, bool) {
-	item, ok := inv.RegisteredItems[itemID]
-	if ok {
-		return item, true
+	// Now fetch globally
+	if inv.db == nil {
+		return Item{}, false
 	}
-	if inv.Parent != nil {
-		return inv.Parent.getRegisteredItem(itemID)
-	}
-	return Item{}, false
+	return GetItem(inv.db, itemID)
 }
 
 func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]Balance {

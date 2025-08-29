@@ -29,7 +29,7 @@ func main() {
 
 	// Register item with generated UUID
 	appleID := inventory.GenerateUUID()
-	inv.RegisterItem(inventory.Item{
+	inventory.RegisterItem(db, inventory.Item{
 		ID:          appleID,
 		Name:        "Apple",
 		Unit:        "pcs",
