@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -299,4 +300,76 @@ func (inv *Inventory) AddChildInventory(childID string) (*Inventory, error) {
 
 	inv.SubInventories[childID] = child
 	return child, nil
+}
+
+// LoadTransactionsForInventories loads all transactions and their items for the given inventory IDs.
+// Returns a map from inventory ID to a slice of Transactions.
+func LoadTransactionsForInventories(db *sql.DB, inventoryIDs []string) (map[string][]Transaction, error) {
+	result := make(map[string][]Transaction)
+	if len(inventoryIDs) == 0 {
+		return result, nil
+	}
+
+	// Build query with IN clause
+	query := "SELECT id, inventory_id, type, timestamp, note FROM transactions WHERE inventory_id IN (?" + strings.Repeat(",?", len(inventoryIDs)-1) + ")"
+	args := make([]interface{}, len(inventoryIDs))
+	for i, id := range inventoryIDs {
+		args[i] = id
+	}
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query transactions: %w", err)
+	}
+	defer rows.Close()
+
+	transactions := make(map[string]*Transaction)
+	for rows.Next() {
+		var tx Transaction
+		var ts time.Time
+		if err := rows.Scan(&tx.ID, &tx.InventoryID, &tx.Type, &ts, &tx.Note); err != nil {
+			return nil, fmt.Errorf("failed to scan transaction: %w", err)
+		}
+		tx.Timestamp = ts
+		tx.Items = []TransactionItem{}
+		transactions[tx.ID] = &tx
+		result[tx.InventoryID] = append(result[tx.InventoryID], tx)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error occurred during iteration of transactions: %w", err)
+	}
+
+	// Load transaction items for all found transactions
+	if len(transactions) == 0 {
+		return result, nil
+	}
+	txIDs := make([]interface{}, 0, len(transactions))
+	for id := range transactions {
+		txIDs = append(txIDs, id)
+	}
+	itemQuery := "SELECT transaction_id, item_id, quantity, unit, balance, unit_price, currency FROM transaction_items WHERE transaction_id IN (?" + strings.Repeat(",?", len(txIDs)-1) + ")"
+	itemRows, err := db.Query(itemQuery, txIDs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query transaction items: %w", err)
+	}
+	defer itemRows.Close()
+	for itemRows.Next() {
+		var tid string
+		var item TransactionItem
+		if err := itemRows.Scan(&tid, &item.ItemID, &item.Quantity, &item.Unit, &item.Balance, &item.UnitPrice, &item.Currency); err != nil {
+			return nil, fmt.Errorf("failed to scan transaction item: %w", err)
+		}
+		if tx, ok := transactions[tid]; ok {
+			tx.Items = append(tx.Items, item)
+		}
+	}
+	// Update result with items
+	for invID, txs := range result {
+		for i := range txs {
+			if tx, ok := transactions[txs[i].ID]; ok {
+				result[invID][i].Items = tx.Items
+			}
+		}
+	}
+	return result, nil
 }

@@ -151,7 +151,6 @@ func GetAllItems(db *sql.DB) ([]Item, error) {
 }
 
 func (inv *Inventory) AddTransaction(tx Transaction) {
-	inv.LoadChildren()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	tx.InventoryID = inv.ID
@@ -166,7 +165,6 @@ func (inv *Inventory) AddTransaction(tx Transaction) {
 }
 
 func (inv *Inventory) UpdateTransaction(updatedTx Transaction) {
-	inv.LoadChildren()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	for i, tx := range inv.Transactions {
@@ -180,32 +178,24 @@ func (inv *Inventory) UpdateTransaction(updatedTx Transaction) {
 }
 
 func (inv *Inventory) DeleteTransaction(txID string) {
-	inv.LoadChildren()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
+	var deletedTx *Transaction
 	for i, tx := range inv.Transactions {
 		if tx.ID == txID {
+			deletedTx = &tx
 			inv.Transactions = append(inv.Transactions[:i], inv.Transactions[i+1:]...)
-			inv.updateTransactionBalancesNoLock([]string{}, time.Now())
-			DeleteTransactionFromDB(inv.db, inv.ID, txID)
-			return
+			break
 		}
 	}
-}
-
-func (inv *Inventory) AddTransactionToSub(subID string, tx Transaction) {
-	inv.LoadChildren()
-	inv.mutex.Lock()
-	sub, ok := inv.SubInventories[subID]
-	inv.mutex.Unlock()
-	if !ok {
-		return
+	inv.updateTransactionBalancesNoLock([]string{}, time.Now())
+	DeleteTransactionFromDB(inv.db, inv.ID, txID)
+	if deletedTx != nil {
+		PersistInventorySince(inv.db, inv.ID, deletedTx.Timestamp, extractItemIDs(*deletedTx))
 	}
-	sub.AddTransaction(tx)
 }
 
 func (inv *Inventory) RemoveItems(items []TransactionItem, note string, timestamp time.Time) {
-	inv.LoadChildren()
 	tx := Transaction{
 		ID:          GenerateUUID(),
 		InventoryID: inv.ID,
@@ -218,7 +208,6 @@ func (inv *Inventory) RemoveItems(items []TransactionItem, note string, timestam
 }
 
 func (inv *Inventory) AddItems(items []TransactionItem, note string, timestamp time.Time) {
-	inv.LoadChildren()
 	tx := Transaction{
 		ID:          GenerateUUID(),
 		InventoryID: inv.ID,
@@ -429,4 +418,35 @@ func contains(slice []string, val string) bool {
 		}
 	}
 	return false
+}
+
+// AddOrUpdateTransactionItem adds a new TransactionItem to a transaction or updates it if it exists.
+// It persists the inventory state since the transaction's timestamp for the affected item.
+func (inv *Inventory) AddOrUpdateTransactionItem(txID string, newItem TransactionItem) error {
+	inv.mutex.Lock()
+	defer inv.mutex.Unlock()
+
+	for i, tx := range inv.Transactions {
+		if tx.ID == txID {
+			found := false
+			for j, item := range inv.Transactions[i].Items {
+				if item.ItemID == newItem.ItemID {
+					// Update existing item
+					inv.Transactions[i].Items[j] = newItem
+					found = true
+					break
+				}
+			}
+			if !found {
+				// Add new item
+				inv.Transactions[i].Items = append(inv.Transactions[i].Items, newItem)
+			}
+			// Update balances for this transaction
+			inv.updateTransactionBalancesNoLock([]string{newItem.ItemID}, tx.Timestamp)
+			// Persist changes
+			PersistInventorySince(inv.db, inv.ID, tx.Timestamp, []string{newItem.ItemID})
+			return nil
+		}
+	}
+	return fmt.Errorf("transaction %s not found", txID)
 }
