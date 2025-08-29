@@ -36,6 +36,22 @@ func main() {
 		Currency:    "IDR",
 		Description: "",
 	})
+	orangeID := inventory.GenerateUUID()
+	inventory.RegisterItem(db, inventory.Item{
+		ID:          orangeID,
+		Name:        "Orange",
+		Unit:        "pcs",
+		Currency:    "IDR",
+		Description: "",
+	})
+	bananaId := inventory.GenerateUUID()
+	inventory.RegisterItem(db, inventory.Item{
+		ID:          bananaId,
+		Name:        "Banana",
+		Unit:        "pcs",
+		Currency:    "IDR",
+		Description: "",
+	})
 
 	// Add exchange rates
 	inventory.AddCurrencyConversionRule(inventory.CurrencyConversionRule{
@@ -71,8 +87,9 @@ func main() {
 		ID:   inventory.GenerateUUID(),
 		Type: inventory.TransactionTypeAdd,
 		Items: []inventory.TransactionItem{
-			{ItemID: appleID, Quantity: 2, Unit: "box"}, // adds 20 pcs
-			{ItemID: appleID, Quantity: 5, Unit: "pcs"}, // adds 5 pcs
+			{ItemID: appleID, Quantity: 2, Unit: "box"},  // adds 20 pcs
+			{ItemID: appleID, Quantity: 5, Unit: "pcs"},  // adds 5 pcs
+			{ItemID: orangeID, Quantity: 9, Unit: "pcs"}, // adds 9 pcs
 		},
 		Note:      "Restock with box and pcs",
 		Timestamp: time.Now(),
@@ -83,8 +100,9 @@ func main() {
 		ID:   inventory.GenerateUUID(),
 		Type: inventory.TransactionTypeAdd,
 		Items: []inventory.TransactionItem{
-			{ItemID: appleID, Quantity: 1, Unit: "box"}, // adds 10 pcs
-			{ItemID: appleID, Quantity: 3, Unit: "pcs"}, // adds 3 pcs
+			{ItemID: appleID, Quantity: 1, Unit: "box"},  // adds 10 pcs
+			{ItemID: orangeID, Quantity: 3, Unit: "pcs"}, // adds 3 pcs
+			{ItemID: bananaId, Quantity: 2, Unit: "box"}, // adds 3 pcs
 		},
 		Note:      "Restock with box and pcs",
 		Timestamp: time.Now(),
@@ -99,4 +117,33 @@ func main() {
 	fmt.Printf("Apple stock: %d %s (Value: %.2f %s)\n",
 		appleBalance.Quantity, appleBalance.Unit,
 		appleBalance.Value, appleBalance.Currency)
+
+	fmt.Println()
+
+	allBalances := inv.GetBalances()
+	fmt.Println("All item balances:")
+	for itemID, balance := range allBalances {
+		item, _ := inventory.GetItem(db, itemID)
+		fmt.Printf("- %s: %d %s (Value: %.2f %s)\n",
+			item.Name, balance.Quantity, balance.Unit,
+			balance.Value, balance.Currency)
+	}
+
+	inv1Balances := inv1.GetBalances()
+	fmt.Println("\nInventory 1 item balances:")
+	for itemID, balance := range inv1Balances {
+		item, _ := inventory.GetItem(db, itemID)
+		fmt.Printf("- %s: %d %s (Value: %.2f %s)\n",
+			item.Name, balance.Quantity, balance.Unit,
+			balance.Value, balance.Currency)
+	}
+
+	inv2Balances := inv2.GetBalances()
+	fmt.Println("\nInventory 2 item balances:")
+	for itemID, balance := range inv2Balances {
+		item, _ := inventory.GetItem(db, itemID)
+		fmt.Printf("- %s: %d %s (Value: %.2f %s)\n",
+			item.Name, balance.Quantity, balance.Unit,
+			balance.Value, balance.Currency)
+	}
 }

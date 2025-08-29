@@ -279,14 +279,8 @@ func (inv *Inventory) GetBalances() map[string]Balance {
 			balances[item.ItemID] = bal
 		}
 	}
-	return balances
-}
-
-func (inv *Inventory) GetBalancesRecursive() map[string]Balance {
-	inv.LoadChildren()
-	balances := inv.GetBalances()
 	for _, sub := range inv.SubInventories {
-		subBalances := sub.GetBalancesRecursive()
+		subBalances := sub.GetBalances()
 		for k, v := range subBalances {
 			bal := balances[k]
 			bal.Quantity += v.Quantity
