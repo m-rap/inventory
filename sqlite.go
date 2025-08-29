@@ -31,7 +31,7 @@ func WithSQLite(db *sql.DB) (*Inventory, error) {
 	}
 
 	// Load inventory data
-	if err := LoadInventory(db, inv); err != nil {
+	if err := inv.LoadChildren(); err != nil {
 		return nil, fmt.Errorf("failed to load inventory: %w", err)
 	}
 
@@ -175,9 +175,9 @@ func PersistAllInventories(inv *Inventory) {
 	}
 }
 
-func LoadInventory(db *sql.DB, inv *Inventory) error {
+func (inv *Inventory) LoadChildren() error {
 	// Query to fetch child inventories based on the parent inventory ID
-	rows, err := db.Query("SELECT id FROM inventories WHERE parent_id = ?", inv.ID)
+	rows, err := inv.db.Query("SELECT id FROM inventories WHERE parent_id = ?", inv.ID)
 	if err != nil {
 		return fmt.Errorf("failed to query child inventories for parent_id %s: %w", inv.ID, err)
 	}
@@ -193,20 +193,20 @@ func LoadInventory(db *sql.DB, inv *Inventory) error {
 		if existing, ok := inv.SubInventories[id]; ok {
 			// Use the existing child inventory
 			sub = existing
-			sub.db = db
+			sub.db = inv.db
 			sub.ParentID = inv.ID
 			sub.Parent = inv
 		} else {
 			// Create a new Inventory object for the child
 			sub = NewInventory(id)
-			sub.db = db
+			sub.db = inv.db
 			sub.ParentID = inv.ID
 			sub.Parent = inv
 			inv.SubInventories[id] = sub
 		}
 
 		// Recursively load the children of the current child inventory
-		if err := LoadInventory(db, sub); err != nil {
+		if err := sub.LoadChildren(); err != nil {
 			return err
 		}
 	}

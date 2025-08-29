@@ -151,7 +151,7 @@ func GetAllItems(db *sql.DB) ([]Item, error) {
 }
 
 func (inv *Inventory) AddTransaction(tx Transaction) {
-	inv.loadFromPersistence()
+	inv.LoadChildren()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	tx.InventoryID = inv.ID
@@ -166,7 +166,7 @@ func (inv *Inventory) AddTransaction(tx Transaction) {
 }
 
 func (inv *Inventory) UpdateTransaction(updatedTx Transaction) {
-	inv.loadFromPersistence()
+	inv.LoadChildren()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	for i, tx := range inv.Transactions {
@@ -180,7 +180,7 @@ func (inv *Inventory) UpdateTransaction(updatedTx Transaction) {
 }
 
 func (inv *Inventory) DeleteTransaction(txID string) {
-	inv.loadFromPersistence()
+	inv.LoadChildren()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	for i, tx := range inv.Transactions {
@@ -194,7 +194,7 @@ func (inv *Inventory) DeleteTransaction(txID string) {
 }
 
 func (inv *Inventory) AddTransactionToSub(subID string, tx Transaction) {
-	inv.loadFromPersistence()
+	inv.LoadChildren()
 	inv.mutex.Lock()
 	sub, ok := inv.SubInventories[subID]
 	inv.mutex.Unlock()
@@ -205,7 +205,7 @@ func (inv *Inventory) AddTransactionToSub(subID string, tx Transaction) {
 }
 
 func (inv *Inventory) RemoveItems(items []TransactionItem, note string, timestamp time.Time) {
-	inv.loadFromPersistence()
+	inv.LoadChildren()
 	tx := Transaction{
 		ID:          GenerateUUID(),
 		InventoryID: inv.ID,
@@ -218,7 +218,7 @@ func (inv *Inventory) RemoveItems(items []TransactionItem, note string, timestam
 }
 
 func (inv *Inventory) AddItems(items []TransactionItem, note string, timestamp time.Time) {
-	inv.loadFromPersistence()
+	inv.LoadChildren()
 	tx := Transaction{
 		ID:          GenerateUUID(),
 		InventoryID: inv.ID,
@@ -231,7 +231,7 @@ func (inv *Inventory) AddItems(items []TransactionItem, note string, timestamp t
 }
 
 func (inv *Inventory) GetTransactionsForItems(itemIDs []string) []Transaction {
-	inv.loadFromPersistence()
+	inv.LoadChildren()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	var filtered []Transaction
@@ -247,7 +247,7 @@ func (inv *Inventory) GetTransactionsForItems(itemIDs []string) []Transaction {
 }
 
 func (inv *Inventory) GetItemReports() map[string][]TransactionItem {
-	inv.loadFromPersistence()
+	inv.LoadChildren()
 	reports := make(map[string][]TransactionItem)
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
@@ -266,7 +266,7 @@ func normalizeItem(item TransactionItem, base Item) (int, float64) {
 }
 
 func (inv *Inventory) GetBalances() map[string]Balance {
-	inv.loadFromPersistence()
+	inv.LoadChildren()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	balances := make(map[string]Balance)
@@ -294,7 +294,7 @@ func (inv *Inventory) GetBalances() map[string]Balance {
 }
 
 func (inv *Inventory) GetBalancesRecursive() map[string]Balance {
-	inv.loadFromPersistence()
+	inv.LoadChildren()
 	balances := inv.GetBalances()
 	for _, sub := range inv.SubInventories {
 		subBalances := sub.GetBalancesRecursive()
@@ -321,7 +321,7 @@ func (inv *Inventory) getRegisteredItem(itemID string) (Item, bool) {
 }
 
 func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]Balance {
-	inv.loadFromPersistence()
+	inv.LoadChildren()
 	inv.mutex.Lock()
 	defer inv.mutex.Unlock()
 	balances := make(map[string]Balance)
@@ -398,12 +398,6 @@ func (inv *Inventory) updateTransactionBalancesNoLock(itemIDs []string, since ti
 			item.Balance = bal
 			balances[item.ItemID] = bal
 		}
-	}
-}
-
-func (inv *Inventory) loadFromPersistence() {
-	if inv.db != nil {
-		LoadInventory(inv.db, inv)
 	}
 }
 
