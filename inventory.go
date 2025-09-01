@@ -53,12 +53,15 @@ type Transaction struct {
 }
 
 type TransactionItem struct {
-	ItemID    string
-	Quantity  int
-	Unit      string
-	Balance   int
-	UnitPrice float64
-	Currency  string
+	TransactionID string
+	ItemID        string
+	Quantity      int
+	Unit          string
+	Balance       int
+	UnitPrice     float64
+	Currency      string
+	Timestamp     time.Time
+	OrderIndex    int
 }
 
 var (
@@ -255,43 +258,30 @@ func normalizeItem(item TransactionItem, base Item) (int, float64) {
 }
 
 func (inv *Inventory) GetBalances() map[string]Balance {
-	inv.LoadChildren()
-	inv.mutex.Lock()
-	defer inv.mutex.Unlock()
 	balances := make(map[string]Balance)
-	for _, tx := range inv.Transactions {
-		for _, item := range tx.Items {
-			base, ok := GetItem(inv.db, item.ItemID)
-			if !ok {
-				continue
+
+	// Use DB-backed latest transaction items for this inventory
+	if inv.db != nil {
+		items, err := LoadLatestTransactionItemsDistinct(inv.db, inv.ID)
+		if err == nil {
+			for _, item := range items {
+				base, ok := GetItem(inv.db, item.ItemID)
+				if !ok {
+					continue
+				}
+				balances[item.ItemID] = Balance{
+					Quantity: item.Balance,
+					Value:    float64(item.Balance) * item.UnitPrice,
+					Unit:     base.Unit,
+					Currency: base.Currency,
+				}
 			}
-			qty, cost := normalizeItem(item, base)
-			bal := balances[item.ItemID]
-			if tx.Type == TransactionTypeAdd {
-				bal.Quantity += qty
-				bal.Value += float64(qty) * cost
-			} else if tx.Type == TransactionTypeRemove {
-				bal.Quantity -= qty
-				bal.Value -= float64(qty) * cost
-			}
-			bal.Unit = base.Unit
-			bal.Currency = base.Currency
-			balances[item.ItemID] = bal
 		}
 	}
-	for _, sub := range inv.SubInventories {
-		subBalances := sub.GetBalances()
-		for k, v := range subBalances {
-			bal := balances[k]
-			bal.Quantity += v.Quantity
-			bal.Value += v.Value
-			if bal.Unit == "" {
-				bal.Unit = v.Unit
-				bal.Currency = v.Currency
-			}
-			balances[k] = bal
-		}
-	}
+
+	// No need to aggregate balances from sub-inventories,
+	// as balances in transaction items are already system-wide.
+
 	return balances
 }
 

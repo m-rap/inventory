@@ -72,6 +72,7 @@ func InitSchema(db *sql.DB) error {
 		balance INTEGER,
 		unit_price REAL,
 		currency TEXT,
+		order_index INTEGER DEFAULT 0,
 		PRIMARY KEY (transaction_id, item_id)
 	);
 
@@ -158,10 +159,10 @@ func PersistTransaction(db *sql.DB, tx Transaction) {
 		VALUES (?, ?, ?, ?, ?)`,
 		tx.ID, tx.InventoryID, tx.Type, tx.Timestamp, tx.Note)
 
-	for _, item := range tx.Items {
-		_, _ = db.Exec(`REPLACE INTO transaction_items (transaction_id, item_id, quantity, unit, balance, unit_price, currency)
+	for idx, item := range tx.Items {
+		_, _ = db.Exec(`REPLACE INTO transaction_items (transaction_id, item_id, quantity, unit, balance, unit_price, currency, order_index)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			tx.ID, item.ItemID, item.Quantity, item.Unit, item.Balance, item.UnitPrice, item.Currency)
+			tx.ID, item.ItemID, item.Quantity, item.Unit, item.Balance, item.UnitPrice, item.Currency, idx)
 	}
 }
 
@@ -372,4 +373,112 @@ func LoadTransactionsForInventories(db *sql.DB, inventoryIDs []string) (map[stri
 		}
 	}
 	return result, nil
+}
+
+// LoadTransactionItemsSorted loads all transaction items for an inventory,
+// joined with transactions, sorted by transaction timestamp and order_index.
+func LoadTransactionItemsSorted(db *sql.DB, inventoryID string) ([]struct {
+	TransactionID string
+	Timestamp     time.Time
+	OrderIndex    int
+	Item          TransactionItem
+}, error) {
+	query := `
+        SELECT
+            ti.transaction_id,
+            t.timestamp,
+            ti.order_index,
+            ti.item_id,
+            ti.quantity,
+            ti.unit,
+            ti.balance,
+            ti.unit_price,
+            ti.currency
+        FROM transaction_items ti
+        JOIN transactions t ON ti.transaction_id = t.id
+        WHERE t.inventory_id = ?
+        ORDER BY t.timestamp ASC, ti.order_index ASC
+    `
+	rows, err := db.Query(query, inventoryID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query sorted transaction items: %w", err)
+	}
+	defer rows.Close()
+
+	var results []struct {
+		TransactionID string
+		Timestamp     time.Time
+		OrderIndex    int
+		Item          TransactionItem
+	}
+	for rows.Next() {
+		var tid string
+		var ts time.Time
+		var orderIdx int
+		var item TransactionItem
+		if err := rows.Scan(&tid, &ts, &orderIdx, &item.ItemID, &item.Quantity, &item.Unit, &item.Balance, &item.UnitPrice, &item.Currency); err != nil {
+			return nil, fmt.Errorf("failed to scan transaction item: %w", err)
+		}
+		results = append(results, struct {
+			TransactionID string
+			Timestamp     time.Time
+			OrderIndex    int
+			Item          TransactionItem
+		}{
+			TransactionID: tid,
+			Timestamp:     ts,
+			OrderIndex:    orderIdx,
+			Item:          item,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error occurred during iteration: %w", err)
+	}
+	return results, nil
+}
+
+// LoadLatestTransactionItemsDistinct loads the latest transaction item for each distinct item_id
+// for a given inventory, sorted by transaction timestamp DESC and order_index DESC.
+func LoadLatestTransactionItemsDistinct(db *sql.DB, inventoryID string) ([]TransactionItem, error) {
+	query := `
+        SELECT
+            ti.transaction_id,
+            t.timestamp,
+            ti.order_index,
+            ti.item_id,
+            ti.quantity,
+            ti.unit,
+            ti.balance,
+            ti.unit_price,
+            ti.currency
+        FROM transaction_items ti
+        JOIN transactions t ON ti.transaction_id = t.id
+        WHERE t.inventory_id = ?
+        ORDER BY t.timestamp DESC, ti.order_index DESC
+    `
+	rows, err := db.Query(query, inventoryID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query transaction items: %w", err)
+	}
+	defer rows.Close()
+
+	var results []TransactionItem
+	seen := make(map[string]bool)
+	for rows.Next() {
+		var tid string
+		var ts time.Time
+		var orderIdx int
+		var item TransactionItem
+		if err := rows.Scan(&tid, &ts, &orderIdx, &item.ItemID, &item.Quantity, &item.Unit, &item.Balance, &item.UnitPrice, &item.Currency); err != nil {
+			return nil, fmt.Errorf("failed to scan transaction item: %w", err)
+		}
+		if !seen[item.ItemID] {
+			results = append(results, item)
+			seen[item.ItemID] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error occurred during iteration: %w", err)
+	}
+	return results, nil
 }
