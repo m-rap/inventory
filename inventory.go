@@ -294,47 +294,30 @@ func (inv *Inventory) getRegisteredItem(itemID string) (Item, bool) {
 }
 
 func (inv *Inventory) GetBalancesForItems(itemIDs []string) map[string]Balance {
-	inv.LoadChildren()
-	inv.mutex.Lock()
-	defer inv.mutex.Unlock()
 	balances := make(map[string]Balance)
-	// Calculate balances for current inventory
-	for _, tx := range inv.Transactions {
-		for _, item := range tx.Items {
-			if contains(itemIDs, item.ItemID) {
-				base, ok := inv.getRegisteredItem(item.ItemID)
+
+	// Use DB-backed latest transaction items for this inventory and filter by itemIDs
+	if inv.db != nil && len(itemIDs) > 0 {
+		items, err := LoadLatestTransactionItemsDistinct(inv.db, inv.ID, itemIDs...)
+		if err == nil {
+			for _, item := range items {
+				base, ok := GetItem(inv.db, item.ItemID)
 				if !ok {
 					continue
 				}
-				qty, cost := normalizeItem(item, base)
-				bal := balances[item.ItemID]
-				if tx.Type == TransactionTypeAdd {
-					bal.Quantity += qty
-					bal.Value += float64(qty) * cost
-				} else if tx.Type == TransactionTypeRemove {
-					bal.Quantity -= qty
-					bal.Value -= float64(qty) * cost
+				balances[item.ItemID] = Balance{
+					Quantity: item.Balance,
+					Value:    float64(item.Balance) * item.UnitPrice,
+					Unit:     base.Unit,
+					Currency: base.Currency,
 				}
-				bal.Unit = base.Unit
-				bal.Currency = base.Currency
-				balances[item.ItemID] = bal
 			}
 		}
 	}
-	// Recursively add balances from sub-inventories
-	for _, sub := range inv.SubInventories {
-		subBalances := sub.GetBalancesForItems(itemIDs)
-		for k, v := range subBalances {
-			bal := balances[k]
-			bal.Quantity += v.Quantity
-			bal.Value += v.Value
-			if bal.Unit == "" {
-				bal.Unit = v.Unit
-				bal.Currency = v.Currency
-			}
-			balances[k] = bal
-		}
-	}
+
+	// No need to aggregate balances from sub-inventories,
+	// as balances in transaction items are already system-wide.
+
 	return balances
 }
 

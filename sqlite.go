@@ -377,12 +377,17 @@ func LoadTransactionsForInventories(db *sql.DB, inventoryIDs []string) (map[stri
 
 // LoadTransactionItemsSorted loads all transaction items for an inventory,
 // joined with transactions, sorted by transaction timestamp and order_index.
-func LoadTransactionItemsSorted(db *sql.DB, inventoryID string) ([]struct {
+// If ascending is true, sorts ASC; if false, sorts DESC.
+func LoadTransactionItemsSorted(db *sql.DB, inventoryID string, ascending bool, itemIDs ...string) ([]struct {
 	TransactionID string
 	Timestamp     time.Time
 	OrderIndex    int
 	Item          TransactionItem
 }, error) {
+	order := "ASC"
+	if !ascending {
+		order = "DESC"
+	}
 	query := `
         SELECT
             ti.transaction_id,
@@ -396,9 +401,18 @@ func LoadTransactionItemsSorted(db *sql.DB, inventoryID string) ([]struct {
             ti.currency
         FROM transaction_items ti
         JOIN transactions t ON ti.transaction_id = t.id
-        WHERE t.inventory_id = ?
-        ORDER BY t.timestamp ASC, ti.order_index ASC
+        WHERE t.inventory_id = ? 
     `
+	args := []interface{}{inventoryID}
+	if len(itemIDs) > 0 {
+		placeholders := strings.Repeat(",?", len(itemIDs)-1)
+		query += " AND ti.item_id IN (?" + placeholders + ")"
+		for _, id := range itemIDs {
+			args = append(args, id)
+		}
+	}
+	query += fmt.Sprintf(" ORDER BY t.timestamp %s, ti.order_index %s", order, order)
+
 	rows, err := db.Query(query, inventoryID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query sorted transaction items: %w", err)
@@ -438,9 +452,10 @@ func LoadTransactionItemsSorted(db *sql.DB, inventoryID string) ([]struct {
 }
 
 // LoadLatestTransactionItemsDistinct loads the latest transaction item for each distinct item_id
-// for a given inventory, sorted by transaction timestamp DESC and order_index DESC.
-func LoadLatestTransactionItemsDistinct(db *sql.DB, inventoryID string) ([]TransactionItem, error) {
-	query := `
+// for a given inventory, optionally filtered by itemIDs.
+// If itemIDs is nil or empty, loads all items.
+func LoadLatestTransactionItemsDistinct(db *sql.DB, inventoryID string, itemIDs ...string) ([]TransactionItem, error) {
+	baseQuery := `
         SELECT
             ti.transaction_id,
             t.timestamp,
@@ -454,9 +469,18 @@ func LoadLatestTransactionItemsDistinct(db *sql.DB, inventoryID string) ([]Trans
         FROM transaction_items ti
         JOIN transactions t ON ti.transaction_id = t.id
         WHERE t.inventory_id = ?
-        ORDER BY t.timestamp DESC, ti.order_index DESC
     `
-	rows, err := db.Query(query, inventoryID)
+	args := []interface{}{inventoryID}
+	if len(itemIDs) > 0 {
+		placeholders := strings.Repeat(",?", len(itemIDs)-1)
+		baseQuery += " AND ti.item_id IN (?" + placeholders + ")"
+		for _, id := range itemIDs {
+			args = append(args, id)
+		}
+	}
+	baseQuery += " ORDER BY t.timestamp DESC, ti.order_index DESC"
+
+	rows, err := db.Query(baseQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transaction items: %w", err)
 	}
