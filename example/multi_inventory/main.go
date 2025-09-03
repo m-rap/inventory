@@ -4,11 +4,65 @@ import (
 	"database/sql"
 	"fmt"
 	"inventory"
+	"log"
 	"os"
-	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+var (
+	assetID, inventoryID, rawMaterialsID, workInProgressID, finishedGoodsID, cashID, equityID, expensesID string
+	steelID, widgetID                                                                                     string
+)
+
+func seedData(db *sql.DB) error {
+	// Account hierarchy
+	var err error
+	assetID, err = inventory.AddAccount(db, "Assets", "")
+	if err != nil {
+		return err
+	}
+	inventoryID, err = inventory.AddAccount(db, "Inventory", assetID)
+	if err != nil {
+		return err
+	}
+	rawMaterialsID, err = inventory.AddAccount(db, "Raw Materials", inventoryID)
+	if err != nil {
+		return err
+	}
+	workInProgressID, err = inventory.AddAccount(db, "Work In Progress", inventoryID)
+	if err != nil {
+		return err
+	}
+	finishedGoodsID, err = inventory.AddAccount(db, "Finished Goods", inventoryID)
+	if err != nil {
+		return err
+	}
+	cashID, err = inventory.AddAccount(db, "Cash", assetID)
+	if err != nil {
+		return err
+	}
+	equityID, err = inventory.AddAccount(db, "Equity", "")
+	if err != nil {
+		return err
+	}
+	expensesID, err = inventory.AddAccount(db, "Expenses", "")
+	if err != nil {
+		return err
+	}
+
+	// Items
+	steelID, err = inventory.AddItem(db, "Steel", "kg", "")
+	if err != nil {
+		return err
+	}
+	widgetID, err = inventory.AddItem(db, "Widget", "pcs", "")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func main() {
 	// Remove existing database file for a clean example run
@@ -17,133 +71,35 @@ func main() {
 	// Initialize SQLite DB
 	db, err := sql.Open("sqlite3", "file:inventory.db?cache=shared&mode=rwc")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	defer db.Close()
 
-	// Create inventory bound to SQLite
-	inv, err := inventory.WithSQLite(db)
+	inventory.InitSchema(db)
+	err = seedData(db)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	// Register item with generated UUID
-	appleID := inventory.GenerateUUID()
-	inventory.RegisterItem(db, inventory.Item{
-		ID:          appleID,
-		Name:        "Apple",
-		Unit:        "pcs",
-		Currency:    "IDR",
-		Description: "",
-	})
-	orangeID := inventory.GenerateUUID()
-	inventory.RegisterItem(db, inventory.Item{
-		ID:          orangeID,
-		Name:        "Orange",
-		Unit:        "pcs",
-		Currency:    "IDR",
-		Description: "",
-	})
-	bananaId := inventory.GenerateUUID()
-	inventory.RegisterItem(db, inventory.Item{
-		ID:          bananaId,
-		Name:        "Banana",
-		Unit:        "pcs",
-		Currency:    "IDR",
-		Description: "",
+	// Transaction: Owner invests 1000 USD equity → Cash
+	inventory.ApplyTransaction(db, "Owner Investment", []inventory.Line{
+		{AccountID: cashID, ItemID: "", Quantity: 1000, Unit: "USD", Price: 1, Currency: "USD"},   // Cash
+		{AccountID: equityID, ItemID: "", Quantity: 1000, Unit: "USD", Price: 1, Currency: "USD"}, // Equity
 	})
 
-	// Add exchange rates
-	inventory.AddCurrencyConversionRule(inventory.CurrencyConversionRule{
-		FromCurrency: "USD",
-		ToCurrency:   "IDR",
-		Rate:         16000,
-	})
-	inventory.AddCurrencyConversionRule(inventory.CurrencyConversionRule{
-		FromCurrency: "EUR",
-		ToCurrency:   "IDR",
-		Rate:         17000,
+	// Transaction: Purchase Steel (100kg @ 5 USD/kg)
+	inventory.ApplyTransaction(db, "Purchase Steel 100kg", []inventory.Line{
+		{AccountID: rawMaterialsID, ItemID: steelID, Quantity: 100, Unit: "kg", Price: 5, Currency: "USD"}, // Raw Materials
+		{AccountID: cashID, ItemID: "", Quantity: -500, Unit: "USD", Price: 1, Currency: "USD"},            // Cash decreases
+		{AccountID: expensesID, ItemID: "", Quantity: 500, Unit: "USD", Price: 1, Currency: "USD"},         // Expense recognized
 	})
 
-	// Add unit conversions
-	inventory.AddUnitConversionRule(inventory.UnitConversionRule{
-		FromUnit: "box",
-		ToUnit:   "pcs",
-		Factor:   10,
-	}) // 1 box = 10 pcs
+	// Market prices
+	inventory.SetMarketPrice(db, steelID, 8, "USD") // steel now 8 USD/kg
 
-	inv1, err := inv.AddChildInventory("inv1")
-	if err != nil {
-		panic(err)
-	}
+	fmt.Println("=== Historical Cost Balances (Leaf Accounts) ===")
+	inventory.PrintBalances(db)
 
-	inv2, err := inv.AddChildInventory("inv2")
-	if err != nil {
-		panic(err)
-	}
-
-	// Add a transaction
-	inv1.AddTransaction(inventory.Transaction{
-		ID:   inventory.GenerateUUID(),
-		Type: inventory.TransactionTypeAdd,
-		Items: []inventory.TransactionItem{
-			{ItemID: appleID, Quantity: 2, Unit: "box"},  // adds 20 pcs
-			{ItemID: appleID, Quantity: 5, Unit: "pcs"},  // adds 5 pcs
-			{ItemID: orangeID, Quantity: 9, Unit: "pcs"}, // adds 9 pcs
-		},
-		Note:      "Restock with box and pcs",
-		Timestamp: time.Now(),
-	})
-
-	// Add a transaction
-	inv2.AddTransaction(inventory.Transaction{
-		ID:   inventory.GenerateUUID(),
-		Type: inventory.TransactionTypeAdd,
-		Items: []inventory.TransactionItem{
-			{ItemID: appleID, Quantity: 1, Unit: "box"},  // adds 10 pcs
-			{ItemID: orangeID, Quantity: 3, Unit: "pcs"}, // adds 3 pcs
-			{ItemID: bananaId, Quantity: 2, Unit: "box"}, // adds 3 pcs
-		},
-		Note:      "Restock with box and pcs",
-		Timestamp: time.Now(),
-	})
-
-	// Persist changes if needed
-	inventory.PersistAllInventories(inv)
-
-	// Check balance
-	balances := inv.GetBalancesForItems([]string{appleID})
-	appleBalance := balances[appleID]
-	fmt.Printf("Apple stock: %d %s (Value: %.2f %s)\n",
-		appleBalance.Quantity, appleBalance.Unit,
-		appleBalance.Value, appleBalance.Currency)
-
-	fmt.Println()
-
-	allBalances := inv.GetBalances()
-	fmt.Println("All item balances:")
-	for itemID, balance := range allBalances {
-		item, _ := inventory.GetItem(db, itemID)
-		fmt.Printf("- %s: %d %s (Value: %.2f %s)\n",
-			item.Name, balance.Quantity, balance.Unit,
-			balance.Value, balance.Currency)
-	}
-
-	inv1Balances := inv1.GetBalances()
-	fmt.Println("\nInventory 1 item balances:")
-	for itemID, balance := range inv1Balances {
-		item, _ := inventory.GetItem(db, itemID)
-		fmt.Printf("- %s: %d %s (Value: %.2f %s)\n",
-			item.Name, balance.Quantity, balance.Unit,
-			balance.Value, balance.Currency)
-	}
-
-	inv2Balances := inv2.GetBalances()
-	fmt.Println("\nInventory 2 item balances:")
-	for itemID, balance := range inv2Balances {
-		item, _ := inventory.GetItem(db, itemID)
-		fmt.Printf("- %s: %d %s (Value: %.2f %s)\n",
-			item.Name, balance.Quantity, balance.Unit,
-			balance.Value, balance.Currency)
-	}
+	fmt.Println("\n=== Market Value Balances (Leaf Accounts) ===")
+	inventory.PrintMarketBalances(db)
 }

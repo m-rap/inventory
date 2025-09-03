@@ -1,7 +1,7 @@
 package inventory
 
 import (
-	"sync"
+	"database/sql"
 )
 
 type UnitConversionRule struct {
@@ -16,42 +16,18 @@ type CurrencyConversionRule struct {
 	Rate         float64
 }
 
-var (
-	unitConversionRules     []UnitConversionRule
-	currencyConversionRules []CurrencyConversionRule
-	conversionMutex         sync.Mutex
-)
-
-func AddUnitConversionRule(rule UnitConversionRule) {
-	conversionMutex.Lock()
-	defer conversionMutex.Unlock()
-	unitConversionRules = append(unitConversionRules, rule)
-}
-
-func AddCurrencyConversionRule(rule CurrencyConversionRule) {
-	conversionMutex.Lock()
-	defer conversionMutex.Unlock()
-	currencyConversionRules = append(currencyConversionRules, rule)
-}
-
-func ConvertUnit(quantity int, fromUnit, toUnit string) int {
-	conversionMutex.Lock()
-	defer conversionMutex.Unlock()
-	for _, rule := range unitConversionRules {
-		if rule.FromUnit == fromUnit && rule.ToUnit == toUnit {
-			return int(float64(quantity) * rule.Factor)
-		}
+func ConvertUnit(db *sql.DB, quantity float64, fromUnit, toUnit string) (float64, error) {
+	rule, err := LoadConversionRule(db, fromUnit, toUnit)
+	if err != nil {
+		return quantity, err
 	}
-	return quantity
+	return quantity * rule.Factor, nil
 }
 
-func ConvertCurrency(amount float64, fromCurrency, toCurrency string) float64 {
-	conversionMutex.Lock()
-	defer conversionMutex.Unlock()
-	for _, rule := range currencyConversionRules {
-		if rule.FromCurrency == fromCurrency && rule.ToCurrency == toCurrency {
-			return amount * rule.Rate
-		}
+func ConvertCurrency(db *sql.DB, amount float64, fromCurrency, toCurrency string) float64 {
+	rule, err := LoadCurrencyConversionRule(db, fromCurrency, toCurrency)
+	if err != nil {
+		return amount
 	}
-	return amount
+	return amount * rule.Rate
 }

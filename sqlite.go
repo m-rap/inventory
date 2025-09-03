@@ -4,76 +4,54 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
-
-const rootInventoryID = "root" // Constant for the root inventory ID
-
-// WithSQLite initializes an Inventory object with the given SQLite database connection.
-func WithSQLite(db *sql.DB) (*Inventory, error) {
-	inv := NewInventory(rootInventoryID)
-	inv.db = db
-
-	// Initialize the database schema
-	if err := InitSchema(db); err != nil {
-		return nil, fmt.Errorf("failed to initialize schema: %w", err)
-	}
-
-	// Ensure root inventory is persisted
-	_, err := db.Exec("REPLACE INTO inventories (id, name, parent_id) VALUES (?, ?, ?)", inv.ID, inv.ID, inv.ParentID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert root inventory: %w", err)
-	}
-
-	// Load conversion rules
-	if err := LoadConversionRules(db); err != nil {
-		return nil, fmt.Errorf("failed to load conversion rules: %w", err)
-	}
-
-	// Load inventory data
-	if err := inv.LoadChildren(); err != nil {
-		return nil, fmt.Errorf("failed to load inventory: %w", err)
-	}
-
-	return inv, nil
-}
 
 // InitSchema creates the necessary database tables if they do not already exist.
 func InitSchema(db *sql.DB) error {
 	schema := `
-	CREATE TABLE IF NOT EXISTS inventories (
+	-- Table to store inventories or financial accounts
+	CREATE TABLE IF NOT EXISTS accounts (
 		id TEXT PRIMARY KEY,
-		name TEXT,
-		parent_id TEXT
+		name TEXT NOT NULL,
+		parent_id TEXT REFERENCES accounts(id)
 	);
 
-	CREATE TABLE IF NOT EXISTS items (
-		item_id TEXT PRIMARY KEY,
-		name TEXT,
-		description TEXT,
-		unit TEXT,
-		currency TEXT
+	CREATE TABLE IF NOT EXISTS items(
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		unit TEXT NOT NULL,
+		description TEXT
 	);
 
 	CREATE TABLE IF NOT EXISTS transactions (
 		id TEXT PRIMARY KEY,
-		inventory_id TEXT,
-		type INTEGER,
-		timestamp DATETIME,
+		date DATETIME NOT NULL,
+		description TEXT
+	);
+
+	CREATE TABLE IF NOT EXISTS transaction_lines (
+		id TEXT PRIMARY KEY,
+		transaction_id TEXT NOT NULL REFERENCES transactions(id),
+		account_id TEXT NOT NULL REFERENCES accounts(id),
+		item_id TEXT NOT NULL REFERENCES items(item_id),
+		quantity REAL NOT NULL,
+		price REAL, -- price per unit
+		unit TEXT,
+		currency TEXT,
 		note TEXT
 	);
 
-	CREATE TABLE IF NOT EXISTS transaction_items (
-		transaction_id TEXT,
-		item_id TEXT,
-		quantity INTEGER,
-		unit TEXT,
-		balance INTEGER,
-		unit_price REAL,
-		currency TEXT,
-		order_index INTEGER DEFAULT 0,
-		PRIMARY KEY (transaction_id, item_id)
+	CREATE TABLE balance_history (
+		id TEXT PRIMARY KEY,
+		item_id TEXT NOT NULL REFERENCES items(id),
+		account_id TEXT NOT NULL REFERENCES accounts(id),
+		transaction_id TEXT NOT NULL REFERENCES transactions(id),
+		quantity REAL NOT NULL,
+		total_cost REAL NOT NULL,
+		avg_cost REAL NOT NULL
 	);
 
 	CREATE TABLE IF NOT EXISTS unit_conversions (
@@ -89,6 +67,15 @@ func InitSchema(db *sql.DB) error {
 		rate REAL,
 		PRIMARY KEY (from_currency, to_currency)
 	);
+
+	CREATE TABLE market_prices (
+		id TEXT PRIMARY KEY,
+		item_id TEXT NOT NULL REFERENCES items(id),
+		date DATETIME NOT NULL,
+		price REAL NOT NULL,   -- market price per unit
+		unit TEXT NOT NULL,    -- e.g. kg
+		currency TEXT NOT NULL -- e.g. USD
+	);
 	`
 
 	// Execute the schema creation query
@@ -100,409 +87,246 @@ func InitSchema(db *sql.DB) error {
 	return nil
 }
 
-func PersistInventory(db *sql.DB, inv *Inventory) {
-	_, _ = db.Exec("REPLACE INTO inventories (id, name, parent_id) VALUES (?, ?, ?)", inv.ID, inv.ID, inv.ParentID)
-	for _, tx := range inv.Transactions {
-		PersistTransaction(db, tx)
-	}
-	for id, sub := range inv.SubInventories {
-		sub.ParentID = inv.ID
-		sub.ID = id
-		PersistInventory(db, sub)
-	}
+func AddAccount(db *sql.DB, name, parentID string) (string, error) {
+	id := uuid.NewString()
+	_, err := db.Exec("INSERT INTO accounts(id,name,parent_id) VALUES(?,?,?)", id, name, sql.NullString{String: parentID, Valid: parentID != ""})
+	return id, err
 }
 
-func PersistInventorySince(db *sql.DB, inventoryID string, since time.Time, itemIDs []string) {
-	txRows, _ := db.Query("SELECT id, type, timestamp, note FROM transactions WHERE inventory_id = ? AND timestamp >= ?", inventoryID, since)
-	defer txRows.Close()
-	for txRows.Next() {
-		var tx Transaction
-		tx.InventoryID = inventoryID
-		tx.Items = []TransactionItem{}
-		tx.ID = ""
-		tx.Note = ""
-		var ts time.Time
-		_ = txRows.Scan(&tx.ID, &tx.Type, &ts, &tx.Note)
-		tx.Timestamp = ts
-
-		itemRows, _ := db.Query("SELECT item_id, quantity, unit, balance, unit_price, currency FROM transaction_items WHERE transaction_id = ?", tx.ID)
-		for itemRows.Next() {
-			var item TransactionItem
-			_ = itemRows.Scan(&item.ItemID, &item.Quantity, &item.Unit, &item.Balance, &item.UnitPrice, &item.Currency)
-			tx.Items = append(tx.Items, item)
-		}
-		itemRows.Close()
-		PersistTransaction(db, tx)
-	}
-
-	for _, itemID := range itemIDs {
-		row := db.QueryRow("SELECT name, description, unit, currency FROM items WHERE item_id = ?", itemID)
-		var item Item
-		item.ID = itemID
-		_ = row.Scan(&item.Name, &item.Description, &item.Unit, &item.Currency)
-		PersistItem(db, "", item)
-	}
+func AddItem(db *sql.DB, name, unit, description string) (string, error) {
+	id := uuid.NewString()
+	_, err := db.Exec("INSERT INTO items(id,name,unit,description) VALUES(?,?,?,?)", id, name, unit, description)
+	return id, err
 }
 
-func PersistItem(db *sql.DB, _ string, item Item) {
-	_, _ = db.Exec(`REPLACE INTO items (item_id, name, description, unit, currency)
-		VALUES (?, ?, ?, ?, ?)`,
-		item.ID, item.Name, item.Description, item.Unit, item.Currency)
-}
-
-func DeleteItemFromDB(db *sql.DB, _ string, itemID string) {
-	_, _ = db.Exec("DELETE FROM items WHERE item_id = ?", itemID)
-}
-
-func PersistTransaction(db *sql.DB, tx Transaction) {
-	_, _ = db.Exec(`REPLACE INTO transactions (id, inventory_id, type, timestamp, note)
-		VALUES (?, ?, ?, ?, ?)`,
-		tx.ID, tx.InventoryID, tx.Type, tx.Timestamp, tx.Note)
-
-	for idx, item := range tx.Items {
-		_, _ = db.Exec(`REPLACE INTO transaction_items (transaction_id, item_id, quantity, unit, balance, unit_price, currency, order_index)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			tx.ID, item.ItemID, item.Quantity, item.Unit, item.Balance, item.UnitPrice, item.Currency, idx)
-	}
-}
-
-func DeleteTransactionFromDB(db *sql.DB, inventoryID, txID string) {
-	_, _ = db.Exec("DELETE FROM transactions WHERE id = ? AND inventory_id = ?", txID, inventoryID)
-	_, _ = db.Exec("DELETE FROM transaction_items WHERE transaction_id = ?", txID)
-}
-
-func PersistAllInventories(inv *Inventory) {
-	if inv.db != nil {
-		PersistInventory(inv.db, inv)
-	}
-}
-
-func (inv *Inventory) LoadChildren() error {
-	// Query to fetch child inventories based on the parent inventory ID
-	rows, err := inv.db.Query("SELECT id FROM inventories WHERE parent_id = ?", inv.ID)
+func ApplyTransaction(db *sql.DB, desc string, lines []Line) error {
+	tx, err := db.Begin()
 	if err != nil {
-		return fmt.Errorf("failed to query child inventories for parent_id %s: %w", inv.ID, err)
+		return err
 	}
-	defer rows.Close() // Ensure rows are closed after processing
+	now := time.Now()
+	tid := uuid.NewString()
 
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return fmt.Errorf("failed to scan child inventory: %w", err)
+	_, err = tx.Exec("INSERT INTO transactions(id,date,description) VALUES(?,?,?)", tid, now, desc)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	for _, l := range lines {
+		lid := uuid.NewString()
+		_, err := tx.Exec(
+			"INSERT INTO transaction_lines(id,transaction_id,account_id,item_id,quantity,unit,price,currency,note) VALUES(?,?,?,?,?,?,?,?)",
+			lid, tid, l.AccountID, sql.NullString{String: l.ItemID, Valid: l.ItemID != ""}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
+		if err != nil {
+			tx.Rollback()
+			return err
 		}
 
-		var sub *Inventory
-		if existing, ok := inv.SubInventories[id]; ok {
-			// Use the existing child inventory
-			sub = existing
-			sub.db = inv.db
-			sub.ParentID = inv.ID
-			sub.Parent = inv
-		} else {
-			// Create a new Inventory object for the child
-			sub = NewInventory(id)
-			sub.db = inv.db
-			sub.ParentID = inv.ID
-			sub.Parent = inv
-			inv.SubInventories[id] = sub
+		var prevQty, prevTotal float64
+		err = tx.QueryRow(`
+			SELECT h.quantity, h.total_cost
+			FROM balance_history h
+			JOIN transactions t ON h.transaction_id = t.id
+			WHERE h.item_id=? AND h.account_id=? AND t.date <= ?
+			ORDER BY t.date DESC, h.id DESC
+			LIMIT 1`,
+			l.ItemID, l.AccountID, now).Scan(&prevQty, &prevTotal)
+
+		if err == sql.ErrNoRows {
+			prevQty, prevTotal = 0, 0
+		} else if err != nil {
+			tx.Rollback()
+			return err
 		}
 
-		// Recursively load the children of the current child inventory
-		if err := sub.LoadChildren(); err != nil {
+		newQty := prevQty + l.Quantity
+		newTotal := prevTotal + l.Quantity*l.Price
+		avgCost := 0.0
+		if newQty != 0 {
+			avgCost = newTotal / newQty
+		}
+
+		hid := uuid.NewString()
+		_, err = tx.Exec(`INSERT INTO balance_history(id,item_id,account_id,transaction_id,quantity,total_cost,avg_cost)
+		                  VALUES(?,?,?,?,?,?,?)`,
+			hid, l.ItemID, l.AccountID, tid, newQty, newTotal, avgCost)
+		if err != nil {
+			tx.Rollback()
 			return err
 		}
 	}
 
-	// Check for errors during row iteration
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("error occurred during iteration of child inventories: %w", err)
-	}
-
+	tx.Commit()
 	return nil
 }
 
-func LoadConversionRules(db *sql.DB) error {
-	// Load unit conversion rules
-	rules, err := db.Query("SELECT from_unit, to_unit, factor FROM unit_conversions")
-	if err != nil {
-		return fmt.Errorf("failed to query unit conversion rules: %w", err)
-	}
-	defer rules.Close()
-
-	for rules.Next() {
-		var from, to string
-		var factor float64
-		if err := rules.Scan(&from, &to, &factor); err != nil {
-			return fmt.Errorf("failed to scan unit conversion rule: %w", err)
-		}
-		AddUnitConversionRule(
-			UnitConversionRule{
-				FromUnit: from,
-				ToUnit:   to,
-				Factor:   factor,
-			})
-	}
-
-	// Check for errors during unit conversion rule iteration
-	if err := rules.Err(); err != nil {
-		return fmt.Errorf("error occurred during iteration of unit conversion rules: %w", err)
-	}
-
-	// Load currency conversion rules
-	crules, err := db.Query("SELECT from_currency, to_currency, rate FROM currency_conversions")
-	if err != nil {
-		return fmt.Errorf("failed to query currency conversion rules: %w", err)
-	}
-	defer crules.Close()
-
-	for crules.Next() {
-		var from, to string
-		var rate float64
-		if err := crules.Scan(&from, &to, &rate); err != nil {
-			return fmt.Errorf("failed to scan currency conversion rule: %w", err)
-		}
-		AddCurrencyConversionRule(
-			CurrencyConversionRule{
-				FromCurrency: from,
-				ToCurrency:   to,
-				Rate:         rate,
-			})
-	}
-
-	// Check for errors during currency conversion rule iteration
-	if err := crules.Err(); err != nil {
-		return fmt.Errorf("error occurred during iteration of currency conversion rules: %w", err)
-	}
-
-	return nil
+func SetMarketPrice(db *sql.DB, itemID string, price float64, currency string) error {
+	_, err := db.Exec(`
+		INSERT INTO market_prices(id,item_id,date,price,currency)
+		VALUES(?,?,?,?,?)
+	`, uuid.NewString(), itemID, time.Now(), price, currency)
+	return err
 }
 
-// AddChildInventory creates a new child inventory under the current inventory, persists it, and returns the new inventory.
-func (inv *Inventory) AddChildInventory(childID string) (*Inventory, error) {
-	if inv.db == nil {
-		return nil, fmt.Errorf("inventory is not associated with a database")
-	}
-	if _, exists := inv.SubInventories[childID]; exists {
-		return nil, fmt.Errorf("child inventory with ID %s already exists", childID)
-	}
-
-	child := NewInventory(childID)
-	child.ParentID = inv.ID
-	child.db = inv.db
-
-	// Persist the new child inventory
-	_, err := inv.db.Exec(
-		"REPLACE INTO inventories (id, name, parent_id) VALUES (?, ?, ?)",
-		child.ID, child.ID, child.ParentID,
-	)
+func BuildAccountTree(db *sql.DB) (map[string][]string, error) {
+	rows, err := db.Query(`SELECT id,name,parent_id FROM accounts`)
 	if err != nil {
-		return nil, fmt.Errorf("failed to persist child inventory: %w", err)
-	}
-
-	inv.SubInventories[childID] = child
-	return child, nil
-}
-
-// LoadTransactionsForInventories loads all transactions and their items for the given inventory IDs.
-// Returns a map from inventory ID to a slice of Transactions.
-func LoadTransactionsForInventories(db *sql.DB, inventoryIDs []string) (map[string][]Transaction, error) {
-	result := make(map[string][]Transaction)
-	if len(inventoryIDs) == 0 {
-		return result, nil
-	}
-
-	// Build query with IN clause
-	query := "SELECT id, inventory_id, type, timestamp, note FROM transactions WHERE inventory_id IN (?" + strings.Repeat(",?", len(inventoryIDs)-1) + ")"
-	args := make([]interface{}, len(inventoryIDs))
-	for i, id := range inventoryIDs {
-		args[i] = id
-	}
-
-	rows, err := db.Query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query transactions: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
-	transactions := make(map[string]*Transaction)
-	for rows.Next() {
-		var tx Transaction
-		var ts time.Time
-		if err := rows.Scan(&tx.ID, &tx.InventoryID, &tx.Type, &ts, &tx.Note); err != nil {
-			return nil, fmt.Errorf("failed to scan transaction: %w", err)
-		}
-		tx.Timestamp = ts
-		tx.Items = []TransactionItem{}
-		transactions[tx.ID] = &tx
-		result[tx.InventoryID] = append(result[tx.InventoryID], tx)
+	type node struct {
+		id, name, parent string
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error occurred during iteration of transactions: %w", err)
+	accMap := map[string]node{}
+	for rows.Next() {
+		var id, name string
+		var parent sql.NullString
+		rows.Scan(&id, &name, &parent)
+		parentID := ""
+		if parent.Valid {
+			parentID = parent.String
+		}
+		accMap[id] = node{id: id, name: name, parent: parentID}
 	}
 
-	// Load transaction items for all found transactions
-	if len(transactions) == 0 {
-		return result, nil
-	}
-	txIDs := make([]interface{}, 0, len(transactions))
-	for id := range transactions {
-		txIDs = append(txIDs, id)
-	}
-	itemQuery := "SELECT transaction_id, item_id, quantity, unit, balance, unit_price, currency FROM transaction_items WHERE transaction_id IN (?" + strings.Repeat(",?", len(txIDs)-1) + ")"
-	itemRows, err := db.Query(itemQuery, txIDs...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query transaction items: %w", err)
-	}
-	defer itemRows.Close()
-	for itemRows.Next() {
-		var tid string
-		var item TransactionItem
-		if err := itemRows.Scan(&tid, &item.ItemID, &item.Quantity, &item.Unit, &item.Balance, &item.UnitPrice, &item.Currency); err != nil {
-			return nil, fmt.Errorf("failed to scan transaction item: %w", err)
+	paths := map[string][]string{}
+	for id := range accMap {
+		cur := id
+		var path []string
+		for cur != "" {
+			n := accMap[cur]
+			path = append([]string{n.name}, path...)
+			cur = n.parent
 		}
-		if tx, ok := transactions[tid]; ok {
-			tx.Items = append(tx.Items, item)
-		}
+		paths[id] = path
 	}
-	// Update result with items
-	for invID, txs := range result {
-		for i := range txs {
-			if tx, ok := transactions[txs[i].ID]; ok {
-				result[invID][i].Items = tx.Items
-			}
-		}
-	}
-	return result, nil
+	return paths, nil
 }
 
-// LoadTransactionItemsSorted loads all transaction items for an inventory,
-// joined with transactions, sorted by transaction timestamp and order_index.
-// If ascending is true, sorts ASC; if false, sorts DESC.
-func LoadTransactionItemsSorted(db *sql.DB, inventoryID string, ascending bool, itemIDs ...string) ([]struct {
-	TransactionID string
-	Timestamp     time.Time
-	OrderIndex    int
-	Item          TransactionItem
-}, error) {
-	order := "ASC"
-	if !ascending {
-		order = "DESC"
-	}
-	query := `
-        SELECT
-            ti.transaction_id,
-            t.timestamp,
-            ti.order_index,
-            ti.item_id,
-            ti.quantity,
-            ti.unit,
-            ti.balance,
-            ti.unit_price,
-            ti.currency
-        FROM transaction_items ti
-        JOIN transactions t ON ti.transaction_id = t.id
-        WHERE t.inventory_id = ? 
-    `
-	args := []interface{}{inventoryID}
-	if len(itemIDs) > 0 {
-		placeholders := strings.Repeat(",?", len(itemIDs)-1)
-		query += " AND ti.item_id IN (?" + placeholders + ")"
-		for _, id := range itemIDs {
-			args = append(args, id)
-		}
-	}
-	query += fmt.Sprintf(" ORDER BY t.timestamp %s, ti.order_index %s", order, order)
+// --- Fetch & Rollup Historical Balances ---
 
-	rows, err := db.Query(query, inventoryID)
+func FetchLeafBalances(db *sql.DB) ([]Balance, error) {
+	rows, err := db.Query(`
+		SELECT a.id, COALESCE(i.name,''), COALESCE(i.unit,''),
+		       h.quantity, h.avg_cost, h.quantity*h.avg_cost, t.date
+		FROM balance_history h
+		JOIN (
+		    SELECT item_id, account_id, MAX(t.date) as last_date
+		    FROM balance_history bh
+		    JOIN transactions t ON bh.transaction_id = t.id
+		    GROUP BY item_id, account_id
+		) last ON h.item_id=last.item_id AND h.account_id=last.account_id
+		JOIN transactions t ON h.transaction_id=t.id AND t.date=last.last_date
+		LEFT JOIN items i ON h.item_id=i.id
+		JOIN accounts a ON h.account_id=a.id
+	`)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query sorted transaction items: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
-	var results []struct {
-		TransactionID string
-		Timestamp     time.Time
-		OrderIndex    int
-		Item          TransactionItem
-	}
+	var balances []Balance
 	for rows.Next() {
-		var tid string
-		var ts time.Time
-		var orderIdx int
-		var item TransactionItem
-		if err := rows.Scan(&tid, &ts, &orderIdx, &item.ItemID, &item.Quantity, &item.Unit, &item.Balance, &item.UnitPrice, &item.Currency); err != nil {
-			return nil, fmt.Errorf("failed to scan transaction item: %w", err)
+		var accID, item, unit string
+		var date time.Time
+		var qty, avgCost, value float64
+		if err := rows.Scan(&accID, &item, &unit, &qty, &avgCost, &value, &date); err != nil {
+			return nil, err
 		}
-		results = append(results, struct {
-			TransactionID string
-			Timestamp     time.Time
-			OrderIndex    int
-			Item          TransactionItem
-		}{
-			TransactionID: tid,
-			Timestamp:     ts,
-			OrderIndex:    orderIdx,
-			Item:          item,
+		balances = append(balances, Balance{
+			AccountID: accID,
+			Item:      item,
+			Unit:      unit,
+			Quantity:  qty,
+			AvgCost:   avgCost,
+			Value:     value,
+			Date:      date,
 		})
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error occurred during iteration: %w", err)
-	}
-	return results, nil
+	return balances, nil
 }
 
-// LoadLatestTransactionItemsDistinct loads the latest transaction item for each distinct item_id
-// for a given inventory, optionally filtered by itemIDs.
-// If itemIDs is nil or empty, loads all items.
-func LoadLatestTransactionItemsDistinct(db *sql.DB, inventoryID string, itemIDs ...string) ([]TransactionItem, error) {
-	baseQuery := `
-        SELECT
-            ti.transaction_id,
-            t.timestamp,
-            ti.order_index,
-            ti.item_id,
-            ti.quantity,
-            ti.unit,
-            ti.balance,
-            ti.unit_price,
-            ti.currency
-        FROM transaction_items ti
-        JOIN transactions t ON ti.transaction_id = t.id
-        WHERE t.inventory_id = ?
-    `
-	args := []interface{}{inventoryID}
-	if len(itemIDs) > 0 {
-		placeholders := strings.Repeat(",?", len(itemIDs)-1)
-		baseQuery += " AND ti.item_id IN (?" + placeholders + ")"
-		for _, id := range itemIDs {
-			args = append(args, id)
-		}
-	}
-	baseQuery += " ORDER BY t.timestamp DESC, ti.order_index DESC"
+// --- Fetch & Rollup Market Balances ---
 
-	rows, err := db.Query(baseQuery, args...)
+func FetchLeafMarketBalances(db *sql.DB) ([]Balance, error) {
+	rows, err := db.Query(`
+		SELECT a.id, COALESCE(i.name,''), COALESCE(i.unit,''),
+		       h.quantity,
+		       COALESCE(mp.price,0), COALESCE(mp.currency,''),
+		       (h.quantity*COALESCE(mp.price,0)) as market_value
+		FROM balance_history h
+		JOIN (
+		    SELECT item_id, account_id, MAX(t.date) as last_date
+		    FROM balance_history bh
+		    JOIN transactions t ON bh.transaction_id = t.id
+		    GROUP BY item_id, account_id
+		) last ON h.item_id=last.item_id AND h.account_id=last.account_id
+		JOIN transactions t ON h.transaction_id=t.id AND t.date=last.last_date
+		LEFT JOIN items i ON h.item_id=i.id
+		JOIN accounts a ON h.account_id=a.id
+		LEFT JOIN (
+		    SELECT m1.item_id, m1.price, m1.currency
+		    FROM market_prices m1
+		    JOIN (
+		        SELECT item_id, MAX(date) as max_date
+		        FROM market_prices
+		        GROUP BY item_id
+		    ) m2 ON m1.item_id=m2.item_id AND m1.date=m2.max_date
+		) mp ON i.id=mp.item_id
+	`)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query transaction items: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
-	var results []TransactionItem
-	seen := make(map[string]bool)
+	var balances []Balance
 	for rows.Next() {
-		var tid string
-		var ts time.Time
-		var orderIdx int
-		var item TransactionItem
-		if err := rows.Scan(&tid, &ts, &orderIdx, &item.ItemID, &item.Quantity, &item.Unit, &item.Balance, &item.UnitPrice, &item.Currency); err != nil {
-			return nil, fmt.Errorf("failed to scan transaction item: %w", err)
+		var accID, item, unit, currency string
+		var qty, price, marketValue float64
+		if err := rows.Scan(&accID, &item, &unit, &qty, &price, &currency, &marketValue); err != nil {
+			return nil, err
 		}
-		if !seen[item.ItemID] {
-			results = append(results, item)
-			seen[item.ItemID] = true
-		}
+		balances = append(balances, Balance{
+			AccountID:   accID,
+			Item:        item,
+			Unit:        unit,
+			Quantity:    qty,
+			Price:       price,
+			Currency:    currency,
+			MarketValue: marketValue,
+		})
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error occurred during iteration: %w", err)
+	return balances, nil
+}
+
+func AddUnitConversionRule(db *sql.DB, rule UnitConversionRule) error {
+	_, err := db.Exec("INSERT INTO unit_conversions(from_unit,to_unit,factor) VALUES(?,?,?)", rule.FromUnit, rule.ToUnit, rule.Factor)
+	return err
+}
+
+func AddCurrencyConversionRule(db *sql.DB, rule CurrencyConversionRule) error {
+	_, err := db.Exec("INSERT INTO currency_conversions(from_currency,to_currency,rate) VALUES(?,?,?)", rule.FromCurrency, rule.ToCurrency, rule.Rate)
+	return err
+}
+
+func LoadConversionRule(db *sql.DB, fromUnit, toUnit string) (UnitConversionRule, error) {
+	var rule UnitConversionRule
+	err := db.QueryRow("SELECT from_unit,to_unit,factor FROM unit_conversions WHERE from_unit=? AND to_unit=?", fromUnit, toUnit).
+		Scan(&rule.FromUnit, &rule.ToUnit, &rule.Factor)
+	if err != nil {
+		return UnitConversionRule{}, err
 	}
-	return results, nil
+	return rule, nil
+}
+
+func LoadCurrencyConversionRule(db *sql.DB, fromCurrency, toCurrency string) (CurrencyConversionRule, error) {
+	var rule CurrencyConversionRule
+	err := db.QueryRow("SELECT from_currency,to_currency,rate FROM currency_conversions WHERE from_currency=? AND to_currency=?", fromCurrency, toCurrency).
+		Scan(&rule.FromCurrency, &rule.ToCurrency, &rule.Rate)
+	if err != nil {
+		return CurrencyConversionRule{}, err
+	}
+	return rule, nil
 }
