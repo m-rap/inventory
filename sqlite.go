@@ -207,19 +207,52 @@ func BuildAccountTree(db *sql.DB) (map[string][]string, error) {
 // --- Fetch & Rollup Historical Balances ---
 
 func FetchLeafBalances(db *sql.DB) ([]Balance, error) {
+	// rows, err := db.Query(`
+	// 	SELECT a.id, COALESCE(i.name,''), COALESCE(i.unit,''),
+	// 	       h.quantity, h.avg_cost, h.quantity*h.avg_cost, t.date
+	// 	FROM balance_history h
+	// 	JOIN (
+	// 	    SELECT item_id, account_id, MAX(t.date) as last_date
+	// 	    FROM balance_history bh
+	// 	    JOIN transactions t ON bh.transaction_id = t.id
+	// 	    GROUP BY item_id, account_id
+	// 	) last ON h.item_id=last.item_id AND h.account_id=last.account_id
+	// 	JOIN transactions t ON h.transaction_id=t.id AND t.date=last.last_date
+	// 	LEFT JOIN items i ON h.item_id=i.id
+	// 	JOIN accounts a ON h.account_id=a.id
+	// `)
+	// rows, err := db.Query(`
+	// 	select * from (
+	// 		select a.id as account_id, a.parent_id as parent_id, a.name as account,p.name as parent,t.date,t.description,i.id as item_id,i.name as item,l1.quantity as qty,b.quantity as bal,b.total_cost,b.avg_cost,i.unit from balance_history b
+	// 		join accounts a on b.account_id = a.id
+	// 		join transactions t on b.transaction_id = t.id
+	// 		join transaction_lines l1 on l1.transaction_id=b.transaction_id and l1.account_id=b.account_id
+	// 		left join items i on b.item_id = i.id
+	// 		left join accounts p on a.parent_id = p.id
+	// 		order by date desc
+	// 	)
+	// 	group by account_id,item_id
+	// `)
 	rows, err := db.Query(`
-		SELECT a.id, COALESCE(i.name,''), COALESCE(i.unit,''),
-		       h.quantity, h.avg_cost, h.quantity*h.avg_cost, t.date
-		FROM balance_history h
-		JOIN (
-		    SELECT item_id, account_id, MAX(t.date) as last_date
-		    FROM balance_history bh
-		    JOIN transactions t ON bh.transaction_id = t.id
-		    GROUP BY item_id, account_id
-		) last ON h.item_id=last.item_id AND h.account_id=last.account_id
-		JOIN transactions t ON h.transaction_id=t.id AND t.date=last.last_date
-		LEFT JOIN items i ON h.item_id=i.id
-		JOIN accounts a ON h.account_id=a.id
+		select * from (
+			select
+				a.id as account_id,
+				i.name as item,
+				i.unit,
+				b.quantity,
+				b.avg_cost,
+				b.quantity*b.avg_cost,
+				t.date,
+				t.description
+			from balance_history b
+			join accounts a on b.account_id = a.id
+			join transactions t on b.transaction_id = t.id
+			join transaction_lines l1 on l1.transaction_id=b.transaction_id and l1.account_id=b.account_id
+			left join items i on b.item_id = i.id
+			left join accounts p on a.parent_id = p.id
+			order by date desc
+		) 
+		group by account_id,item
 	`)
 	if err != nil {
 		return nil, err
@@ -228,20 +261,22 @@ func FetchLeafBalances(db *sql.DB) ([]Balance, error) {
 
 	var balances []Balance
 	for rows.Next() {
-		var accID, item, unit string
+		var item, unit sql.NullString
+		var accID, desc string
 		var date time.Time
 		var qty, avgCost, value float64
-		if err := rows.Scan(&accID, &item, &unit, &qty, &avgCost, &value, &date); err != nil {
+		if err := rows.Scan(&accID, &item, &unit, &qty, &avgCost, &value, &date, &desc); err != nil {
 			return nil, err
 		}
 		balances = append(balances, Balance{
-			AccountID: accID,
-			Item:      item,
-			Unit:      unit,
-			Quantity:  qty,
-			AvgCost:   avgCost,
-			Value:     value,
-			Date:      date,
+			AccountID:   accID,
+			Item:        item.String,
+			Unit:        unit.String,
+			Quantity:    qty,
+			AvgCost:     avgCost,
+			Value:       value,
+			Date:        date,
+			Description: desc,
 		})
 	}
 	return balances, nil

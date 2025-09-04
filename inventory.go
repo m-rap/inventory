@@ -3,6 +3,7 @@ package inventory
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -39,6 +40,7 @@ type Balance struct {
 	Price       float64
 	Currency    string
 	MarketValue float64
+	Description string
 }
 
 func RollupBalances(balances []Balance, paths map[string][]string) map[string]Balance {
@@ -46,7 +48,7 @@ func RollupBalances(balances []Balance, paths map[string][]string) map[string]Ba
 	for _, b := range balances {
 		path := paths[b.AccountID]
 		for i := 1; i <= len(path); i++ {
-			key := strings.Join(path[:i], " > ")
+			key := strings.Join(path[:i], " > ") + " " + b.Item
 			agg := result[key]
 			agg.Path = path[:i]
 			agg.Quantity += b.Quantity
@@ -70,7 +72,14 @@ func PrintBalances(db *sql.DB) error {
 	rolled := RollupBalances(leaf, paths)
 
 	fmt.Println("=== Historical Cost Balances ===")
-	for k, b := range rolled {
+	keys := make([]string, 0)
+	for k := range rolled {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i := range keys {
+		k := keys[i]
+		b := rolled[k]
 		fmt.Printf("%s | Qty %.2f | Value %.2f | as of %s\n", k, b.Quantity, b.Value, b.Date)
 	}
 	return nil
@@ -81,7 +90,7 @@ func RollupMarketBalances(balances []Balance, paths map[string][]string) map[str
 	for _, b := range balances {
 		path := paths[b.AccountID]
 		for i := 1; i <= len(path); i++ {
-			key := strings.Join(path[:i], " > ")
+			key := strings.Join(path[:i], " > ") + b.Item
 			agg := result[key]
 			agg.Path = path[:i]
 			agg.Quantity += b.Quantity
