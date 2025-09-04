@@ -6,47 +6,74 @@ import (
 	"inventory"
 	"log"
 	"os"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
 var (
-	assetID, inventoryID, rawMaterialsID, workInProgressID, finishedGoodsID, cashID, equityID, expensesID string
-	steelID, widgetID                                                                                     string
+	assetID, inventoryID, rawMaterialID, workInProgressID,
+	finishedProductID, cashID, equityID, expenseID, matPurchaseID, equipmentPurchaseID,
+	productClearingID, incomeID, financialIncomeID, nonFinancialIncomeID string
+	steelID, widgetID string
 )
 
 func seedData(db *sql.DB) error {
 	// Account hierarchy
 	var err error
-	assetID, err = inventory.AddAccount(db, "Assets", "")
+	assetID, err = inventory.AddAccount(db, "asset", "")
 	if err != nil {
 		return err
 	}
-	inventoryID, err = inventory.AddAccount(db, "Inventory", assetID)
+	inventoryID, err = inventory.AddAccount(db, "inventory", assetID)
 	if err != nil {
 		return err
 	}
-	rawMaterialsID, err = inventory.AddAccount(db, "Raw Materials", inventoryID)
+	rawMaterialID, err = inventory.AddAccount(db, "raw material", inventoryID)
 	if err != nil {
 		return err
 	}
-	workInProgressID, err = inventory.AddAccount(db, "Work In Progress", inventoryID)
+	workInProgressID, err = inventory.AddAccount(db, "work in progress", inventoryID)
 	if err != nil {
 		return err
 	}
-	finishedGoodsID, err = inventory.AddAccount(db, "Finished Goods", inventoryID)
+	finishedProductID, err = inventory.AddAccount(db, "finished product", inventoryID)
 	if err != nil {
 		return err
 	}
-	cashID, err = inventory.AddAccount(db, "Cash", assetID)
+	productClearingID, err = inventory.AddAccount(db, "product clearing", inventoryID)
 	if err != nil {
 		return err
 	}
-	equityID, err = inventory.AddAccount(db, "Equity", "")
+	cashID, err = inventory.AddAccount(db, "cash", assetID)
 	if err != nil {
 		return err
 	}
-	expensesID, err = inventory.AddAccount(db, "Expenses", "")
+	equityID, err = inventory.AddAccount(db, "equity", "")
+	if err != nil {
+		return err
+	}
+	expenseID, err = inventory.AddAccount(db, "expense", "")
+	if err != nil {
+		return err
+	}
+	matPurchaseID, err = inventory.AddAccount(db, "material purchase", expenseID)
+	if err != nil {
+		return err
+	}
+	equipmentPurchaseID, err = inventory.AddAccount(db, "equipment purchase", expenseID)
+	if err != nil {
+		return err
+	}
+	incomeID, err = inventory.AddAccount(db, "income", "")
+	if err != nil {
+		return err
+	}
+	financialIncomeID, err = inventory.AddAccount(db, "financial income", incomeID)
+	if err != nil {
+		return err
+	}
+	nonFinancialIncomeID, err = inventory.AddAccount(db, "non-financial income", incomeID)
 	if err != nil {
 		return err
 	}
@@ -82,16 +109,35 @@ func main() {
 	}
 
 	// Transaction: Owner invests 1000 USD equity → Cash
-	inventory.ApplyTransaction(db, "Owner Investment", []inventory.Line{
+	inventory.ApplyTransaction(db, "Owner Investment", time.Now(), []inventory.Line{
 		{AccountID: cashID, ItemID: "", Quantity: 1000, Unit: "USD", Price: 1, Currency: "USD"},   // Cash
 		{AccountID: equityID, ItemID: "", Quantity: 1000, Unit: "USD", Price: 1, Currency: "USD"}, // Equity
 	})
 
+	steelPrice := 5.0
+	widgetSteelNeed := 2.0 // 2 kg steel per widget
+	targetWidgetProduction := 50.0
+	steelNeeded := widgetSteelNeed * targetWidgetProduction
+
 	// Transaction: Purchase Steel (100kg @ 5 USD/kg)
-	inventory.ApplyTransaction(db, "Purchase Steel 100kg", []inventory.Line{
-		{AccountID: rawMaterialsID, ItemID: steelID, Quantity: 100, Unit: "kg", Price: 5, Currency: "USD"}, // Raw Materials
-		{AccountID: cashID, ItemID: "", Quantity: -500, Unit: "USD", Price: 1, Currency: "USD"},            // Cash decreases
-		{AccountID: expensesID, ItemID: "", Quantity: 500, Unit: "USD", Price: 1, Currency: "USD"},         // Expense recognized
+	inventory.ApplyTransaction(db, "Purchase Steel 100kg", time.Now(), []inventory.Line{
+		{AccountID: rawMaterialID, ItemID: steelID, Quantity: 100, Unit: "kg", Price: steelPrice, Currency: ""}, // Raw Materials
+		{AccountID: nonFinancialIncomeID, ItemID: steelID, Quantity: -100, Unit: "kg", Price: steelPrice, Currency: "USD"},
+		{AccountID: cashID, ItemID: "", Quantity: -500, Unit: "USD", Price: 1, Currency: "USD"},       // Cash decreases
+		{AccountID: matPurchaseID, ItemID: "", Quantity: 500, Unit: "USD", Price: 1, Currency: "USD"}, // Expense recognized
+	})
+
+	inventory.ApplyTransaction(db, "Use Steel to Manufacture Widgets", time.Now(), []inventory.Line{
+		{AccountID: workInProgressID, ItemID: steelID, Quantity: steelNeeded, Unit: "kg", Price: steelPrice, Currency: ""}, // WIP increases
+		{AccountID: rawMaterialID, ItemID: steelID, Quantity: -steelNeeded, Unit: "kg", Price: steelPrice, Currency: ""},   // Raw Materials decreases
+	})
+
+	widgetCost := steelNeeded * steelPrice / targetWidgetProduction // 100kg steel makes 50 widgets at 5 USD/kg
+	inventory.ApplyTransaction(db, "Complete Widgets", time.Now(), []inventory.Line{
+		{AccountID: finishedProductID, ItemID: widgetID, Quantity: targetWidgetProduction, Unit: "pcs", Price: widgetCost, Currency: ""},  // Finished Goods increases
+		{AccountID: productClearingID, ItemID: widgetID, Quantity: -targetWidgetProduction, Unit: "pcs", Price: widgetCost, Currency: ""}, // Clearing asset
+		{AccountID: workInProgressID, ItemID: steelID, Quantity: -steelNeeded, Unit: "kg", Price: steelPrice, Currency: ""},               // WIP decreases
+		{AccountID: productClearingID, ItemID: steelID, Quantity: steelNeeded, Unit: "kg", Price: steelPrice, Currency: ""},               // Clearing asset
 	})
 
 	// Market prices

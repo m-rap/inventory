@@ -99,15 +99,14 @@ func AddItem(db *sql.DB, name, unit, description string) (string, error) {
 	return id, err
 }
 
-func ApplyTransaction(db *sql.DB, desc string, lines []Line) error {
+func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Line) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	now := time.Now()
 	tid := uuid.NewString()
 
-	_, err = tx.Exec("INSERT INTO transactions(id,date,description) VALUES(?,?,?)", tid, now, desc)
+	_, err = tx.Exec("INSERT INTO transactions(id,date,description) VALUES(?,?,?)", tid, date, desc)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -131,7 +130,7 @@ func ApplyTransaction(db *sql.DB, desc string, lines []Line) error {
 			WHERE h.item_id=? AND h.account_id=? AND t.date <= ?
 			ORDER BY t.date DESC, h.id DESC
 			LIMIT 1`,
-			l.ItemID, l.AccountID, now).Scan(&prevQty, &prevTotal)
+			l.ItemID, l.AccountID, date).Scan(&prevQty, &prevTotal)
 
 		if err == sql.ErrNoRows {
 			prevQty, prevTotal = 0, 0
