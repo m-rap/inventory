@@ -102,17 +102,23 @@ func main() {
 	}
 	defer db.Close()
 
-	inventory.InitSchema(db)
+	err = inventory.InitSchema(db)
+	if err != nil {
+		log.Fatal(err)
+	}
 	err = seedData(db)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Transaction: Owner invests 1000 USD equity → Cash
-	inventory.ApplyTransaction(db, "Owner Investment", time.Now(), []inventory.Line{
+	err = inventory.ApplyTransaction(db, "Owner Investment", time.Now(), []inventory.Line{
 		{AccountID: cashID, ItemID: "", Quantity: 1000, Unit: "USD", Price: 1, Currency: "USD"},   // Cash
 		{AccountID: equityID, ItemID: "", Quantity: 1000, Unit: "USD", Price: 1, Currency: "USD"}, // Equity
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	steelPrice := 5.0
 	widgetSteelNeed := 2.0 // 2 kg steel per widget
@@ -120,32 +126,50 @@ func main() {
 	steelNeeded := widgetSteelNeed * targetWidgetProduction
 
 	// Transaction: Purchase Steel (100kg @ 5 USD/kg)
-	inventory.ApplyTransaction(db, "Purchase Steel 100kg", time.Now(), []inventory.Line{
+	err = inventory.ApplyTransaction(db, "Purchase Steel 100kg", time.Now(), []inventory.Line{
 		{AccountID: rawMaterialID, ItemID: steelID, Quantity: 100, Unit: "kg", Price: steelPrice, Currency: ""}, // Raw Materials
 		{AccountID: nonFinancialIncomeID, ItemID: steelID, Quantity: -100, Unit: "kg", Price: steelPrice, Currency: "USD"},
 		{AccountID: cashID, ItemID: "", Quantity: -500, Unit: "USD", Price: 1, Currency: "USD"},       // Cash decreases
 		{AccountID: matPurchaseID, ItemID: "", Quantity: 500, Unit: "USD", Price: 1, Currency: "USD"}, // Expense recognized
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	inventory.ApplyTransaction(db, "Use Steel to Manufacture Widgets", time.Now(), []inventory.Line{
+	err = inventory.ApplyTransaction(db, "Use Steel to Manufacture Widgets", time.Now(), []inventory.Line{
 		{AccountID: workInProgressID, ItemID: steelID, Quantity: steelNeeded, Unit: "kg", Price: steelPrice, Currency: ""}, // WIP increases
 		{AccountID: rawMaterialID, ItemID: steelID, Quantity: -steelNeeded, Unit: "kg", Price: steelPrice, Currency: ""},   // Raw Materials decreases
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	widgetCost := steelNeeded * steelPrice / targetWidgetProduction // 100kg steel makes 50 widgets at 5 USD/kg
-	inventory.ApplyTransaction(db, "Complete Widgets", time.Now(), []inventory.Line{
+	err = inventory.ApplyTransaction(db, "Complete Widgets", time.Now(), []inventory.Line{
 		{AccountID: finishedProductID, ItemID: widgetID, Quantity: targetWidgetProduction, Unit: "pcs", Price: widgetCost, Currency: ""},  // Finished Goods increases
 		{AccountID: productClearingID, ItemID: widgetID, Quantity: -targetWidgetProduction, Unit: "pcs", Price: widgetCost, Currency: ""}, // Clearing asset
 		{AccountID: workInProgressID, ItemID: steelID, Quantity: -steelNeeded, Unit: "kg", Price: steelPrice, Currency: ""},               // WIP decreases
 		{AccountID: productClearingID, ItemID: steelID, Quantity: steelNeeded, Unit: "kg", Price: steelPrice, Currency: ""},               // Clearing asset
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Market prices
-	inventory.SetMarketPrice(db, steelID, 8, "USD") // steel now 8 USD/kg
+	err = inventory.SetMarketPrice(db, steelID, 8, "USD", "kg") // steel now 8 USD/kg
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	fmt.Println("=== Historical Cost Balances (Leaf Accounts) ===")
-	inventory.PrintBalances(db)
+	err = inventory.PrintBalances(db)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	fmt.Println("\n=== Market Value Balances (Leaf Accounts) ===")
-	inventory.PrintMarketBalances(db)
+	err = inventory.PrintMarketBalances(db)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

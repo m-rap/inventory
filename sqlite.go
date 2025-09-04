@@ -36,7 +36,7 @@ func InitSchema(db *sql.DB) error {
 		id TEXT PRIMARY KEY,
 		transaction_id TEXT NOT NULL REFERENCES transactions(id),
 		account_id TEXT NOT NULL REFERENCES accounts(id),
-		item_id TEXT NOT NULL REFERENCES items(item_id),
+		item_id TEXT REFERENCES items(item_id),
 		quantity REAL NOT NULL,
 		price REAL, -- price per unit
 		unit TEXT,
@@ -115,7 +115,7 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Line) err
 	for _, l := range lines {
 		lid := uuid.NewString()
 		_, err := tx.Exec(
-			"INSERT INTO transaction_lines(id,transaction_id,account_id,item_id,quantity,unit,price,currency,note) VALUES(?,?,?,?,?,?,?,?)",
+			"INSERT INTO transaction_lines(id,transaction_id,account_id,item_id,quantity,unit,price,currency,note) VALUES(?,?,?,?,?,?,?,?,?)",
 			lid, tid, l.AccountID, sql.NullString{String: l.ItemID, Valid: l.ItemID != ""}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
 		if err != nil {
 			tx.Rollback()
@@ -160,11 +160,11 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Line) err
 	return nil
 }
 
-func SetMarketPrice(db *sql.DB, itemID string, price float64, currency string) error {
+func SetMarketPrice(db *sql.DB, itemID string, price float64, currency string, unit string) error {
 	_, err := db.Exec(`
-		INSERT INTO market_prices(id,item_id,date,price,currency)
-		VALUES(?,?,?,?,?)
-	`, uuid.NewString(), itemID, time.Now(), price, currency)
+		INSERT INTO market_prices(id,item_id,date,price,currency,unit)
+		VALUES(?,?,?,?,?,?)
+	`, uuid.NewString(), itemID, time.Now(), price, currency, unit)
 	return err
 }
 
