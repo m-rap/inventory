@@ -17,7 +17,14 @@ type Item struct {
 	Unit        string
 }
 
-type Line struct {
+type Transaction struct {
+	ID          string
+	Description string
+	Date        time.Time
+	Lines       []TransactionLine
+}
+
+type TransactionLine struct {
 	TransactionID string
 	AccountID     string
 	ItemID        string

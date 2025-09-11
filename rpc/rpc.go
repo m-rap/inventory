@@ -2,224 +2,337 @@ package inventoryrpc
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/binary"
-	"io"
-	"time"
-
+	"errors"
 	"inventory"
+	"math"
+	"time"
 )
 
-const (
-	RPCAddTransaction byte = 1
-	RPCGetBalances    byte = 2
-	RPCGetLogs        byte = 3
-	RPCGetRecursive   byte = 4
-)
+// ---------------- Encoder/Decoder ----------------
 
-type RPCRequest struct {
-	FuncCode byte
-	Payload  []byte
+type Encoder struct {
+	buf bytes.Buffer
 }
 
-type RPCResponse struct {
-	StatusCode byte
-	Payload    []byte
+type Decoder struct {
+	r *bytes.Reader
 }
 
-func successResp(data []byte) RPCResponse {
-	return RPCResponse{StatusCode: 0, Payload: data}
-}
+func NewEncoder() *Encoder            { return &Encoder{} }
+func NewDecoder(data []byte) *Decoder { return &Decoder{r: bytes.NewReader(data)} }
 
-func errorResp(msg string) RPCResponse {
-	return RPCResponse{StatusCode: 1, Payload: []byte(msg)}
-}
+func (e *Encoder) Bytes() []byte { return e.buf.Bytes() }
 
-func ReadRPCRequest(r io.Reader) (RPCRequest, error) {
-	var code byte
-	var length uint32
-
-	if err := binary.Read(r, binary.LittleEndian, &code); err != nil {
-		return RPCRequest{}, err
-	}
-	if err := binary.Read(r, binary.LittleEndian, &length); err != nil {
-		return RPCRequest{}, err
-	}
-
-	payload := make([]byte, length)
-	if _, err := io.ReadFull(r, payload); err != nil {
-		return RPCRequest{}, err
-	}
-
-	return RPCRequest{FuncCode: code, Payload: payload}, nil
-}
-
-func WriteRPCResponse(w io.Writer, resp RPCResponse) error {
-	if err := binary.Write(w, binary.LittleEndian, resp.StatusCode); err != nil {
-		return err
-	}
-	if err := binary.Write(w, binary.LittleEndian, uint32(len(resp.Payload))); err != nil {
-		return err
-	}
-	_, err := w.Write(resp.Payload)
-	return err
-}
-
-func HandleRPC(invs map[string]*inventory.Inventory, db *sql.DB, req RPCRequest) (RPCResponse, error) {
-	buf := bytes.NewReader(req.Payload)
-	invID, err := readString(buf)
-	if err != nil {
-		return errorResp("missing inventory ID"), nil
-	}
-
-	inv, ok := invs[invID]
-	if !ok {
-		return errorResp("inventory not found"), nil
-	}
-
-	switch req.FuncCode {
-	case RPCAddTransaction:
-		tx, err := decodeTransaction(buf)
-		if err != nil {
-			return errorResp("invalid transaction payload"), nil
-		}
-		tx.InventoryID = invID
-		inv.AddTransaction(tx)
-		return successResp(nil), nil
-
-	case RPCGetBalances:
-		balances := inv.GetBalances()
-		data, err := encodeBalances(balances)
-		if err != nil {
-			return errorResp("encode failed"), nil
-		}
-		return successResp(data), nil
-
-	case RPCGetRecursive:
-		balances := inv.GetBalancesRecursive()
-		data, err := encodeBalances(balances)
-		if err != nil {
-			return errorResp("encode failed"), nil
-		}
-		return successResp(data), nil
-
-	// case RPCGetLogs:
-	// 	logs := inv.GetLogs()
-	// 	data, err := encodeLogs(logs)
-	// 	if err != nil {
-	// 		return errorResp("encode failed"), nil
-	// 	}
-	// 	return successResp(data), nil
-
+// Flexible length encoding (Bitcoin-style):
+// 0..252 = 1 byte
+// 0xFD + 2-byte
+// 0xFE + 4-byte
+// 0xFF + 8-byte
+func (e *Encoder) WriteLength(n int) {
+	switch {
+	case n <= 252:
+		e.buf.WriteByte(byte(n))
+	case n <= math.MaxUint16:
+		e.buf.WriteByte(0xFD)
+		binary.Write(&e.buf, binary.LittleEndian, uint16(n))
+	case n <= math.MaxUint32:
+		e.buf.WriteByte(0xFE)
+		binary.Write(&e.buf, binary.LittleEndian, uint32(n))
 	default:
-		return errorResp("unknown function"), nil
+		e.buf.WriteByte(0xFF)
+		binary.Write(&e.buf, binary.LittleEndian, uint64(n))
 	}
 }
 
-// Binary encoding/decoding helpers (simplified)
-func decodeTransaction(r io.Reader) (inventory.Transaction, error) {
-	var tx inventory.Transaction
-
-	id, err := readString(r)
+func (d *Decoder) ReadLength() (int, error) {
+	prefix, err := d.r.ReadByte()
 	if err != nil {
-		return tx, err
+		return 0, err
 	}
-	tx.ID = id
-	if err := binary.Read(r, binary.LittleEndian, &tx.Type); err != nil {
-		return tx, err
+	switch prefix {
+	case 0xFF:
+		var v uint64
+		if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
+			return 0, err
+		}
+		return int(v), nil
+	case 0xFE:
+		var v uint32
+		if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
+			return 0, err
+		}
+		return int(v), nil
+	case 0xFD:
+		var v uint16
+		if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
+			return 0, err
+		}
+		return int(v), nil
+	default:
+		return int(prefix), nil
 	}
-	var ts int64
-	if err := binary.Read(r, binary.LittleEndian, &ts); err != nil {
-		return tx, err
-	}
-	tx.Timestamp = time.Unix(0, ts)
-	note, err := readString(r)
+}
+
+func (e *Encoder) WriteString(s string) {
+	e.WriteLength(len(s))
+	e.buf.WriteString(s)
+}
+
+func (d *Decoder) ReadString() (string, error) {
+	n, err := d.ReadLength()
 	if err != nil {
-		return tx, err
-	}
-	tx.Note = note
-
-	var count uint16
-	if err := binary.Read(r, binary.LittleEndian, &count); err != nil {
-		return tx, err
-	}
-
-	tx.Items = make([]inventory.TransactionItem, count)
-	for i := range tx.Items {
-		itemID, _ := readString(r)
-		var qty, balance int32
-		var price float64
-		unit, _ := readString(r)
-		currency, _ := readString(r)
-		binary.Read(r, binary.LittleEndian, &qty)
-		binary.Read(r, binary.LittleEndian, &balance)
-		binary.Read(r, binary.LittleEndian, &price)
-
-		tx.Items[i] = inventory.TransactionItem{
-			ItemID:    itemID,
-			Quantity:  int(qty),
-			Unit:      unit,
-			Balance:   int(balance),
-			UnitPrice: price,
-			Currency:  currency,
-		}
-	}
-
-	return tx, nil
-}
-
-func encodeBalances(m map[string]inventory.Balance) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	if err := binary.Write(buf, binary.LittleEndian, uint16(len(m))); err != nil {
-		return nil, err
-	}
-	for k, v := range m {
-		if err := writeString(buf, k); err != nil {
-			return nil, err
-		}
-		if err := binary.Write(buf, binary.LittleEndian, int32(v.Quantity)); err != nil {
-			return nil, err
-		}
-		if err := binary.Write(buf, binary.LittleEndian, v.Value); err != nil {
-			return nil, err
-		}
-		if err := writeString(buf, v.Unit); err != nil {
-			return nil, err
-		}
-		if err := writeString(buf, v.Currency); err != nil {
-			return nil, err
-		}
-	}
-	return buf.Bytes(), nil
-}
-
-func encodeLogs(logs []string) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	if err := binary.Write(buf, binary.LittleEndian, uint16(len(logs))); err != nil {
-		return nil, err
-	}
-	for _, line := range logs {
-		if err := writeString(buf, line); err != nil {
-			return nil, err
-		}
-	}
-	return buf.Bytes(), nil
-}
-
-func writeString(w io.Writer, s string) error {
-	if err := binary.Write(w, binary.LittleEndian, uint16(len(s))); err != nil {
-		return err
-	}
-	_, err := w.Write([]byte(s))
-	return err
-}
-
-func readString(r io.Reader) (string, error) {
-	var length uint16
-	if err := binary.Read(r, binary.LittleEndian, &length); err != nil {
 		return "", err
 	}
-	buf := make([]byte, length)
-	_, err := io.ReadFull(r, buf)
-	return string(buf), err
+	buf := make([]byte, n)
+	if _, err := d.r.Read(buf); err != nil {
+		return "", err
+	}
+	return string(buf), nil
+}
+
+func (e *Encoder) WriteFloat64(v float64) {
+	binary.Write(&e.buf, binary.LittleEndian, v)
+}
+
+func (d *Decoder) ReadFloat64() (float64, error) {
+	var v float64
+	err := binary.Read(d.r, binary.LittleEndian, &v)
+	return v, err
+}
+
+func (e *Encoder) WriteTime(t time.Time) {
+	binary.Write(&e.buf, binary.LittleEndian, t.UnixNano())
+}
+
+func (d *Decoder) ReadTime() (time.Time, error) {
+	var ns int64
+	if err := binary.Read(d.r, binary.LittleEndian, &ns); err != nil {
+		return time.Time{}, err
+	}
+	return time.Unix(0, ns), nil
+}
+
+// ---------------- High-level encode/decode ----------------
+
+func (e *Encoder) WriteItem(it inventory.Item) {
+	e.WriteString(it.ID)
+	e.WriteString(it.Name)
+	e.WriteString(it.Description)
+	e.WriteString(it.Unit)
+}
+
+func (d *Decoder) ReadItem() (inventory.Item, error) {
+	id, err := d.ReadString()
+	if err != nil {
+		return inventory.Item{}, err
+	}
+	name, err := d.ReadString()
+	if err != nil {
+		return inventory.Item{}, err
+	}
+	desc, err := d.ReadString()
+	if err != nil {
+		return inventory.Item{}, err
+	}
+	unit, err := d.ReadString()
+	if err != nil {
+		return inventory.Item{}, err
+	}
+	return inventory.Item{ID: id, Name: name, Description: desc, Unit: unit}, nil
+}
+
+func (e *Encoder) WriteTransactionLine(l inventory.TransactionLine) {
+	e.WriteString(l.TransactionID)
+	e.WriteString(l.AccountID)
+	e.WriteString(l.ItemID)
+	e.WriteFloat64(l.Quantity)
+	e.WriteString(l.Unit)
+	e.WriteFloat64(l.Price)
+	e.WriteString(l.Currency)
+	e.WriteString(l.Note)
+}
+
+func (d *Decoder) ReadTransactionLine() (inventory.TransactionLine, error) {
+	trID, err := d.ReadString()
+	if err != nil {
+		return inventory.TransactionLine{}, err
+	}
+	accID, err := d.ReadString()
+	if err != nil {
+		return inventory.TransactionLine{}, err
+	}
+	itemID, err := d.ReadString()
+	if err != nil {
+		return inventory.TransactionLine{}, err
+	}
+	qty, err := d.ReadFloat64()
+	if err != nil {
+		return inventory.TransactionLine{}, err
+	}
+	unit, err := d.ReadString()
+	if err != nil {
+		return inventory.TransactionLine{}, err
+	}
+	price, err := d.ReadFloat64()
+	if err != nil {
+		return inventory.TransactionLine{}, err
+	}
+	currency, err := d.ReadString()
+	if err != nil {
+		return inventory.TransactionLine{}, err
+	}
+	note, err := d.ReadString()
+	if err != nil {
+		return inventory.TransactionLine{}, err
+	}
+
+	return inventory.TransactionLine{
+		TransactionID: trID, AccountID: accID, ItemID: itemID,
+		Quantity: qty, Unit: unit, Price: price, Currency: currency, Note: note,
+	}, nil
+}
+
+func (e *Encoder) WriteTransaction(t inventory.Transaction) {
+	e.WriteString(t.ID)
+	e.WriteString(t.Description)
+	e.WriteTime(t.Date)
+	e.WriteLength(len(t.Lines))
+	for _, line := range t.Lines {
+		e.WriteTransactionLine(line)
+	}
+}
+
+func (d *Decoder) ReadTransaction() (inventory.Transaction, error) {
+	id, err := d.ReadString()
+	if err != nil {
+		return inventory.Transaction{}, err
+	}
+	desc, err := d.ReadString()
+	if err != nil {
+		return inventory.Transaction{}, err
+	}
+	date, err := d.ReadTime()
+	if err != nil {
+		return inventory.Transaction{}, err
+	}
+	n, err := d.ReadLength()
+	if err != nil {
+		return inventory.Transaction{}, err
+	}
+
+	lines := make([]inventory.TransactionLine, 0, n)
+	for i := 0; i < n; i++ {
+		line, err := d.ReadTransactionLine()
+		if err != nil {
+			return inventory.Transaction{}, err
+		}
+		lines = append(lines, line)
+	}
+	return inventory.Transaction{ID: id, Description: desc, Date: date, Lines: lines}, nil
+}
+
+func (e *Encoder) WriteBalance(b inventory.Balance) {
+	e.WriteLength(len(b.Path))
+	for _, p := range b.Path {
+		e.WriteString(p)
+	}
+	e.WriteString(b.AccountID)
+	e.WriteString(b.Item)
+	e.WriteString(b.Unit)
+	e.WriteFloat64(b.Quantity)
+	e.WriteFloat64(b.AvgCost)
+	e.WriteFloat64(b.Value)
+	e.WriteTime(b.Date)
+	e.WriteFloat64(b.Price)
+	e.WriteString(b.Currency)
+	e.WriteFloat64(b.MarketValue)
+	e.WriteString(b.Description)
+}
+
+func (d *Decoder) ReadBalance() (inventory.Balance, error) {
+	n, err := d.ReadLength()
+	if err != nil {
+		return inventory.Balance{}, err
+	}
+	path := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		s, err := d.ReadString()
+		if err != nil {
+			return inventory.Balance{}, err
+		}
+		path = append(path, s)
+	}
+	accountID, err := d.ReadString()
+	if err != nil {
+		return inventory.Balance{}, err
+	}
+	item, err := d.ReadString()
+	if err != nil {
+		return inventory.Balance{}, err
+	}
+	unit, err := d.ReadString()
+	if err != nil {
+		return inventory.Balance{}, err
+	}
+	qty, err := d.ReadFloat64()
+	if err != nil {
+		return inventory.Balance{}, err
+	}
+	avgCost, err := d.ReadFloat64()
+	if err != nil {
+		return inventory.Balance{}, err
+	}
+	value, err := d.ReadFloat64()
+	if err != nil {
+		return inventory.Balance{}, err
+	}
+	date, err := d.ReadTime()
+	if err != nil {
+		return inventory.Balance{}, err
+	}
+	price, err := d.ReadFloat64()
+	if err != nil {
+		return inventory.Balance{}, err
+	}
+	currency, err := d.ReadString()
+	if err != nil {
+		return inventory.Balance{}, err
+	}
+	mv, err := d.ReadFloat64()
+	if err != nil {
+		return inventory.Balance{}, err
+	}
+	desc, err := d.ReadString()
+	if err != nil {
+		return inventory.Balance{}, err
+	}
+
+	return inventory.Balance{
+		Path: path, AccountID: accountID, Item: item, Unit: unit,
+		Quantity: qty, AvgCost: avgCost, Value: value, Date: date,
+		Price: price, Currency: currency, MarketValue: mv, Description: desc,
+	}, nil
+}
+
+// ---------------- Message Wrapper ----------------
+
+type Message struct {
+	Type byte
+	Data []byte
+}
+
+func EncodeMessage(msgType byte, inner func(enc *Encoder)) []byte {
+	e := NewEncoder()
+	e.buf.WriteByte(msgType)
+	inner(e)
+	return e.Bytes()
+}
+
+func DecodeMessage(data []byte) (byte, *Decoder, error) {
+	if len(data) < 1 {
+		return 0, nil, errors.New("empty message")
+	}
+	msgType := data[0]
+	return msgType, NewDecoder(data[1:]), nil
 }

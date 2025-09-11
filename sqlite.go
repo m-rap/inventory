@@ -99,7 +99,7 @@ func AddItem(db *sql.DB, name, unit, description string) (string, error) {
 	return id, err
 }
 
-func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Line) error {
+func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []TransactionLine) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
