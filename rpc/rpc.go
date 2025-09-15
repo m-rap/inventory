@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"hash/crc32"
 	"inventory"
 	"math"
+	"net"
 	"time"
 )
 
 // ---------------- Encoder/Decoder ----------------
 
 type Encoder struct {
-	buf bytes.Buffer
+	Buf bytes.Buffer
 }
 
 type Decoder struct {
@@ -22,50 +24,50 @@ type Decoder struct {
 func NewEncoder() *Encoder            { return &Encoder{} }
 func NewDecoder(data []byte) *Decoder { return &Decoder{r: bytes.NewReader(data)} }
 
-func (e *Encoder) Bytes() []byte { return e.buf.Bytes() }
-
 // Flexible length encoding (Bitcoin-style):
 // 0..252 = 1 byte
 // 0xFD + 2-byte
 // 0xFE + 4-byte
 // 0xFF + 8-byte
-func (e *Encoder) WriteLength(n int) {
+func WriteLength(n int) []byte {
+	buf := bytes.Buffer{}
 	switch {
 	case n <= 252:
-		e.buf.WriteByte(byte(n))
+		buf.WriteByte(byte(n))
 	case n <= math.MaxUint16:
-		e.buf.WriteByte(0xFD)
-		binary.Write(&e.buf, binary.LittleEndian, uint16(n))
+		buf.WriteByte(0xFD)
+		binary.Write(&buf, binary.LittleEndian, uint16(n))
 	case n <= math.MaxUint32:
-		e.buf.WriteByte(0xFE)
-		binary.Write(&e.buf, binary.LittleEndian, uint32(n))
+		buf.WriteByte(0xFE)
+		binary.Write(&buf, binary.LittleEndian, uint32(n))
 	default:
-		e.buf.WriteByte(0xFF)
-		binary.Write(&e.buf, binary.LittleEndian, uint64(n))
+		buf.WriteByte(0xFF)
+		binary.Write(&buf, binary.LittleEndian, uint64(n))
 	}
+	return buf.Bytes()
 }
 
-func (d *Decoder) ReadLength() (int, error) {
-	prefix, err := d.r.ReadByte()
+func ReadLength(r *bytes.Reader) (int, error) {
+	prefix, err := r.ReadByte()
 	if err != nil {
 		return 0, err
 	}
 	switch prefix {
 	case 0xFF:
 		var v uint64
-		if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
+		if err := binary.Read(r, binary.LittleEndian, &v); err != nil {
 			return 0, err
 		}
 		return int(v), nil
 	case 0xFE:
 		var v uint32
-		if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
+		if err := binary.Read(r, binary.LittleEndian, &v); err != nil {
 			return 0, err
 		}
 		return int(v), nil
 	case 0xFD:
 		var v uint16
-		if err := binary.Read(d.r, binary.LittleEndian, &v); err != nil {
+		if err := binary.Read(r, binary.LittleEndian, &v); err != nil {
 			return 0, err
 		}
 		return int(v), nil
@@ -75,12 +77,12 @@ func (d *Decoder) ReadLength() (int, error) {
 }
 
 func (e *Encoder) WriteString(s string) {
-	e.WriteLength(len(s))
-	e.buf.WriteString(s)
+	e.Buf.Write(WriteLength(len(s)))
+	e.Buf.WriteString(s)
 }
 
 func (d *Decoder) ReadString() (string, error) {
-	n, err := d.ReadLength()
+	n, err := ReadLength(d.r)
 	if err != nil {
 		return "", err
 	}
@@ -92,7 +94,7 @@ func (d *Decoder) ReadString() (string, error) {
 }
 
 func (e *Encoder) WriteFloat64(v float64) {
-	binary.Write(&e.buf, binary.LittleEndian, v)
+	binary.Write(&e.Buf, binary.LittleEndian, v)
 }
 
 func (d *Decoder) ReadFloat64() (float64, error) {
@@ -102,7 +104,7 @@ func (d *Decoder) ReadFloat64() (float64, error) {
 }
 
 func (e *Encoder) WriteTime(t time.Time) {
-	binary.Write(&e.buf, binary.LittleEndian, t.UnixNano())
+	binary.Write(&e.Buf, binary.LittleEndian, t.UnixNano())
 }
 
 func (d *Decoder) ReadTime() (time.Time, error) {
@@ -197,7 +199,7 @@ func (e *Encoder) WriteTransaction(t inventory.Transaction) {
 	e.WriteString(t.ID)
 	e.WriteString(t.Description)
 	e.WriteTime(t.Date)
-	e.WriteLength(len(t.Lines))
+	e.Buf.Write(WriteLength(len(t.Lines)))
 	for _, line := range t.Lines {
 		e.WriteTransactionLine(line)
 	}
@@ -216,7 +218,7 @@ func (d *Decoder) ReadTransaction() (inventory.Transaction, error) {
 	if err != nil {
 		return inventory.Transaction{}, err
 	}
-	n, err := d.ReadLength()
+	n, err := ReadLength(d.r)
 	if err != nil {
 		return inventory.Transaction{}, err
 	}
@@ -233,7 +235,7 @@ func (d *Decoder) ReadTransaction() (inventory.Transaction, error) {
 }
 
 func (e *Encoder) WriteBalance(b inventory.Balance) {
-	e.WriteLength(len(b.Path))
+	e.Buf.Write(WriteLength(len(b.Path)))
 	for _, p := range b.Path {
 		e.WriteString(p)
 	}
@@ -251,7 +253,7 @@ func (e *Encoder) WriteBalance(b inventory.Balance) {
 }
 
 func (d *Decoder) ReadBalance() (inventory.Balance, error) {
-	n, err := d.ReadLength()
+	n, err := ReadLength(d.r)
 	if err != nil {
 		return inventory.Balance{}, err
 	}
@@ -315,24 +317,116 @@ func (d *Decoder) ReadBalance() (inventory.Balance, error) {
 	}, nil
 }
 
-// ---------------- Message Wrapper ----------------
+//
+// ===== Message Encode/Decode with CRC32 =====
+//
 
-type Message struct {
-	Type byte
-	Data []byte
-}
+const (
+	TypeItem        = 1
+	TypeTransaction = 2
+	TypeBalance     = 3
+)
 
-func EncodeMessage(msgType byte, inner func(enc *Encoder)) []byte {
-	e := NewEncoder()
-	e.buf.WriteByte(msgType)
-	inner(e)
-	return e.Bytes()
+func EncodeMessage(msgType byte, payload []byte) []byte {
+	buf := bytes.Buffer{}
+
+	buf.WriteByte(msgType)
+	buf.Write(WriteLength(len(payload)))
+	buf.Write(payload)
+
+	// checksum over type + length + payload
+	data := buf.Bytes()
+	crc := crc32.ChecksumIEEE(data)
+	binary.Write(&buf, binary.LittleEndian, crc)
+
+	return buf.Bytes()
 }
 
 func DecodeMessage(data []byte) (byte, *Decoder, error) {
-	if len(data) < 1 {
-		return 0, nil, errors.New("empty message")
+	if len(data) < 5 {
+		return 0, nil, errors.New("too short")
 	}
-	msgType := data[0]
-	return msgType, NewDecoder(data[1:]), nil
+
+	// verify CRC32
+	crcOffset := len(data) - 4
+	expected := binary.LittleEndian.Uint32(data[crcOffset:])
+	actual := crc32.ChecksumIEEE(data[:crcOffset])
+	if expected != actual {
+		return 0, nil, errors.New("checksum mismatch")
+	}
+
+	r := bytes.NewReader(data)
+	msgType, err := r.ReadByte()
+	if err != nil {
+		return 0, nil, err
+	}
+
+	n, err := ReadLength(r)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	if r.Len() < n+4 {
+		return 0, nil, errors.New("incomplete payload")
+	}
+
+	payload := make([]byte, n)
+	if _, err := r.Read(payload); err != nil {
+		return 0, nil, err
+	}
+
+	return msgType, NewDecoder(payload), nil
+}
+
+//
+// ===== UDP Send/Receive with Buffering =====
+//
+
+func SendUDP(conn *net.UDPConn, addr *net.UDPAddr, data []byte) error {
+	_, err := conn.WriteToUDP(data, addr)
+	return err
+}
+
+func ReceiveUDP(conn *net.UDPConn) ([]byte, *net.UDPAddr, error) {
+	buf := make([]byte, 1500)
+	n, addr, err := conn.ReadFromUDP(buf)
+	if err != nil {
+		return nil, nil, err
+	}
+	return buf[:n], addr, nil
+}
+
+type MessageBuffer struct {
+	buf bytes.Buffer
+}
+
+func (u *MessageBuffer) Feed(packet []byte) [][]byte {
+	u.buf.Write(packet)
+	var messages [][]byte
+
+	for {
+		data := u.buf.Bytes()
+		if len(data) < 1 {
+			break
+		}
+
+		r := bytes.NewReader(data[1:])
+		n, err := ReadLength(r)
+		if err != nil {
+			break
+		}
+		consumed := len(data[1:]) - r.Len()
+		total := 1 + consumed + n + 4
+
+		if u.buf.Len() < total {
+			break
+		}
+
+		full := make([]byte, total)
+		copy(full, u.buf.Next(total))
+
+		messages = append(messages, full)
+	}
+
+	return messages
 }
