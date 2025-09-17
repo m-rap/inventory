@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package inventorypb;
+option go_package = "inventory/inventorypb";
+
+message Item {
+	int32 ID = 1;
+	string UUID = 2;
+	string Name = 3;
+	string Description = 4;
+	string Unit = 5;
+}
+
+message Transaction {
+	int32 ID = 1;
+	string UUID = 2;
+	string Description = 3;
+	int64 DatetimeMs = 4;
+}
+
+message TransactionLine {
+	int32 ID = 1;
+	string TransactionUUID = 2;
+	string AccountUUID = 3;
+	string ItemUUID = 4;
+	double Quantity = 5;
+	string Unit = 6;
+	double Price = 7;
+	string Currency = 8;
+	string Note = 9;
+}
+
+message BalanceHistory {
+	int32 ID = 1;
+	repeated string Path = 2;
+	string AccountUUID = 3;
+	string ItemUUID = 4;
+	string Unit = 5;
+	double Quantity = 6;
+	double AvgCost = 7;
+	double Value = 8;
+	int64 DatetimeMs = 9;
+	double Price = 10;
+	string Currency = 11;
+	double MarketValue = 12;
+	string Description = 13;
+}
+
+message UnitConversions {
+	string FromUnit = 1;
+	string ToUnit = 2;
+	double Factor = 3;
+	int64 DatetimeMs = 4;
+}
+
+message CurrencyConversions {
+	string FromCurrency = 1;
+	string ToCurrency = 2;
+	double Rate = 3;
+	int64 DatetimeMs = 4;
+}
+
+message MarketPrices {
+	int32 ID = 1;
+	string ItemUUID = 2;
+	int64 DatetimeMs = 3;
+	double Price = 4;
+	string Unit = 5;
+	string Currency = 6;
+}
