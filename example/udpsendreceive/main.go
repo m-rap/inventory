@@ -19,12 +19,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	pkt := inventoryrpc.Packet{}
-	pkt.H["id"] = []byte{0}
-	pkt.H["type"] = []byte("reqget")
-	pkt.B["item"] = itemBin
 
-	pktBin, err := msgpack.Marshal(&pkt)
+	body := make(map[string][]byte)
+	body["function"] = []byte("InsertItem")
+	body["item"] = itemBin
+
+	pktBin, err := inventoryrpc.EncodePacket(0, inventoryrpc.TypeReq, nil, body)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -40,32 +40,17 @@ func main() {
 
 	for i := range receivedPktBins {
 		fmt.Println("header:")
-		for k, v := range receivedPktBins[i].H {
-			switch k {
-			case "id":
-				var id int
-				err := msgpack.Unmarshal(v, &id)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error decoding id: %v\n", err)
-					break
-				}
-				fmt.Printf("  %s: %d\n", k, id)
+		fmt.Printf("  length: %v\n", receivedPktBins[i].Length)
+		fmt.Printf("  checksum: %v\n", receivedPktBins[i].Checksum)
+		fmt.Printf("  id: %v\n", receivedPktBins[i].Data.H2.ID)
+		fmt.Printf("  type: %v\n", receivedPktBins[i].Data.H2.Type)
+		fmt.Printf("  meta: %v\n", receivedPktBins[i].Data.H2.Meta)
 
-			case "type":
-				var typ string
-				err := msgpack.Unmarshal(v, &typ)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error decoding type: %v\n", err)
-					break
-				}
-				fmt.Printf("  %s: %s\n", k, typ)
-			default:
-				fmt.Printf("  %s: %v\n", k, v)
-			}
-		}
 		fmt.Println("body:")
-		for k, v := range receivedPktBins[i].B {
+		for k, v := range receivedPktBins[i].Data.B {
 			switch k {
+			case "function":
+				fmt.Printf("  %s: %s\n", k, string(v))
 			case "item":
 				var it2 inventory.Item
 				err := msgpack.Unmarshal(v, &it2)
