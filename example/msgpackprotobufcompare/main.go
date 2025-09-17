@@ -24,7 +24,9 @@ func main() {
 	body["function"] = []byte("InsertItem")
 	body["item"] = itemBin
 
-	pktBin, err := inventoryrpc.EncodePacket(0, inventoryrpc.TypeReq, nil, body)
+	bodyBin, err := msgpack.Marshal(body)
+
+	pktBin, err := inventoryrpc.EncodePacket(0, inventoryrpc.TypeReq, nil, bodyBin)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -42,23 +44,29 @@ func main() {
 		fmt.Println("header:")
 		fmt.Printf("  length: %v\n", receivedPktBins[i].Length)
 		fmt.Printf("  checksum: %v\n", receivedPktBins[i].Checksum)
-		fmt.Printf("  id: %v\n", receivedPktBins[i].Data.H2.ID)
-		fmt.Printf("  type: %v\n", receivedPktBins[i].Data.H2.Type)
-		fmt.Printf("  meta: %v\n", receivedPktBins[i].Data.H2.Meta)
+		fmt.Printf("  id: %v\n", receivedPktBins[i].ID)
+		fmt.Printf("  type: %v\n", receivedPktBins[i].Type)
+		fmt.Printf("  meta: %v\n", receivedPktBins[i].Meta)
 
 		fmt.Println("body:")
-		for k, v := range receivedPktBins[i].Data.B {
+		var receivedBodyMap map[string][]byte
+		err := msgpack.Unmarshal(receivedPktBins[i].Body, &receivedBodyMap)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for k, v := range receivedBodyMap {
 			switch k {
 			case "function":
 				fmt.Printf("  %s: %s\n", k, string(v))
 			case "item":
-				var it2 inventory.Item
-				err := msgpack.Unmarshal(v, &it2)
+				var receivedItem inventory.Item
+				err := msgpack.Unmarshal(v, &receivedItem)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Error decoding item: %v\n", err)
 					break
 				}
-				fmt.Printf("  %s: %+v\n", k, it2)
+				fmt.Printf("  %s: %+v\n", k, receivedItem)
 			default:
 				fmt.Printf("  %s: %v\n", k, v)
 			}
