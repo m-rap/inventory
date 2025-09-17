@@ -132,8 +132,8 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 	for _, l := range lines {
 		lid := uuid.NewString()
 		_, err := tx.Exec(
-			"INSERT INTO transaction_lines(id,transaction_id,account_id,item_id,quantity,unit,price,currency,note) VALUES(?,?,?,?,?,?,?,?,?)",
-			lid, tid, l.AccountUUID, sql.NullString{String: l.ItemUUID, Valid: l.ItemUUID != ""}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
+			"INSERT INTO transaction_lines(id,transaction_uuid,account_uuid,item_uuid,quantity,unit,price,currency,note) VALUES(?,?,?,?,?,?,?,?,?)",
+			lid, tid, l.Account.UUID, sql.NullString{String: l.Item.UUID, Valid: l.Item.UUID != ""}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -143,11 +143,11 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 		err = tx.QueryRow(`
 			SELECT h.quantity, h.total_cost
 			FROM balance_history h
-			JOIN transactions t ON h.transaction_id = t.id
-			WHERE h.item_id=? AND h.account_id=? AND t.datetime_ms <= ?
+			JOIN transactions t ON h.transaction_uuid = t.uuid
+			WHERE h.item_uuid=? AND h.account_uuid=? AND t.datetime_ms <= ?
 			ORDER BY t.datetime_ms DESC, h.id DESC
 			LIMIT 1`,
-			l.ItemUUID, l.AccountUUID, date.UnixMilli()).Scan(&prevQty, &prevTotal)
+			l.Item.UUID, l.Account.UUID, date.UnixMilli()).Scan(&prevQty, &prevTotal)
 
 		if err == sql.ErrNoRows {
 			prevQty, prevTotal = 0, 0
@@ -164,9 +164,9 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 		}
 
 		hid := uuid.NewString()
-		_, err = tx.Exec(`INSERT INTO balance_history(id,item_id,account_id,transaction_id,quantity,total_cost,avg_cost)
+		_, err = tx.Exec(`INSERT INTO balance_history(id,item_uuid,account_uuid,transaction_uuid,quantity,total_cost,avg_cost)
 		                  VALUES(?,?,?,?,?,?,?)`,
-			hid, l.ItemUUID, l.AccountUUID, tid, newQty, newTotal, avgCost)
+			hid, l.Item.UUID, l.Account.UUID, tid, newQty, newTotal, avgCost)
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -177,11 +177,11 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 	return nil
 }
 
-func SetMarketPrice(db *sql.DB, itemID string, price float64, currency string, unit string) error {
+func SetMarketPrice(db *sql.DB, itemUUID string, price float64, currency string, unit string) error {
 	_, err := db.Exec(`
-		INSERT INTO market_prices(id,item_id,datetime_ms,price,currency,unit)
+		INSERT INTO market_prices(id,item_uuid,datetime_ms,price,currency,unit)
 		VALUES(?,?,?,?,?,?)
-	`, uuid.NewString(), itemID, time.Now().UnixMilli(), price, currency, unit)
+	`, uuid.NewString(), itemUUID, time.Now().UnixMilli(), price, currency, unit)
 	return err
 }
 
@@ -253,7 +253,7 @@ func FetchLeafBalances(db *sql.DB) ([]BalanceHistory, error) {
 	rows, err := db.Query(`
 		select * from (
 			select
-				a.id as account_id,
+				a.uuid as account_uuid,
 				i.name as item,
 				i.unit,
 				b.quantity,
@@ -262,14 +262,14 @@ func FetchLeafBalances(db *sql.DB) ([]BalanceHistory, error) {
 				t.datetime_ms,
 				t.description
 			from balance_history b
-			join accounts a on b.account_id = a.id
-			join transactions t on b.transaction_id = t.id
-			join transaction_lines l1 on l1.transaction_id=b.transaction_id and l1.account_id=b.account_id
-			left join items i on b.item_id = i.id
-			left join accounts p on a.parent_uuid = p.id
+			join accounts a on b.account_uuid = a.uuid
+			join transactions t on b.transaction_uuid = t.uuid
+			join transaction_lines l1 on l1.transaction_id=b.transaction_uuid and l1.account_uuid=b.account_uuid
+			left join items i on b.item_uuid = i.uuid
+			left join accounts p on a.parent_uuid = p.uuid
 			order by datetime_ms desc
 		) 
-		group by account_id,item
+		group by account_uuid,item
 	`)
 	if err != nil {
 		return nil, err
@@ -278,23 +278,26 @@ func FetchLeafBalances(db *sql.DB) ([]BalanceHistory, error) {
 
 	var balances []BalanceHistory
 	for rows.Next() {
-		var item, unit sql.NullString
-		var accID, desc string
+		var itemUUID, unit sql.NullString
+		var accUUID, desc string
 		var date int64
 		var qty, avgCost, value float64
-		if err := rows.Scan(&accID, &item, &unit, &qty, &avgCost, &value, &date, &desc); err != nil {
+		if err := rows.Scan(&accUUID, &itemUUID, &unit, &qty, &avgCost, &value, &date, &desc); err != nil {
 			return nil, err
 		}
-		balances = append(balances, BalanceHistory{
-			AccountUUID: accID,
-			ItemUUID:    item.String,
+		h := BalanceHistory{
+			Account:     new(Account),
+			Item:        new(Item),
 			Unit:        unit.String,
 			Quantity:    qty,
 			AvgCost:     avgCost,
 			Value:       value,
 			DatetimeMs:  date,
 			Description: desc,
-		})
+		}
+		h.Account.UUID = accUUID
+		h.Item.UUID = itemUUID.String
+		balances = append(balances, h)
 	}
 	return balances, nil
 }
@@ -339,15 +342,18 @@ func FetchLeafMarketBalances(db *sql.DB) ([]BalanceHistory, error) {
 		if err := rows.Scan(&accID, &item, &unit, &qty, &price, &currency, &marketValue); err != nil {
 			return nil, err
 		}
-		balances = append(balances, BalanceHistory{
-			AccountUUID: accID,
-			ItemUUID:    item,
+		h := BalanceHistory{
+			Account:     new(Account),
+			Item:        new(Item),
 			Unit:        unit,
 			Quantity:    qty,
 			Price:       price,
 			Currency:    currency,
 			MarketValue: marketValue,
-		})
+		}
+		h.Account.UUID = accID
+		h.Item.UUID = item
+		balances = append(balances, h)
 	}
 	return balances, nil
 }
