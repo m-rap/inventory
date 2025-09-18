@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,6 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_year_month
 
 CREATE TABLE IF NOT EXISTS transaction_lines (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+	uuid TEXT UNIQUE NOT NULL,
     transaction_uuid TEXT NOT NULL,
     account_uuid TEXT NOT NULL,
     item_uuid TEXT,
@@ -54,24 +56,20 @@ CREATE TABLE IF NOT EXISTS transaction_lines (
 
 CREATE TABLE IF NOT EXISTS balance_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+	uuid TEXT UNIQUE NOT NULL,
     account_uuid TEXT NOT NULL,
+	transaction_uuid TEXT NOT NULL,
     item_uuid TEXT,
     unit TEXT,
     quantity REAL,
+	total_cost REAL,
     avg_cost REAL,
     value REAL,
-    datetime_ms INTEGER NOT NULL,
-    year INTEGER NOT NULL,
-    month INTEGER NOT NULL,
     price REAL,
     currency TEXT,
     market_value REAL,
-    description TEXT,
-    FOREIGN KEY (item_uuid) REFERENCES items(uuid) ON DELETE SET NULL
+    description TEXT
 );
-
-CREATE INDEX IF NOT EXISTS idx_balance_history_year_month
-    ON balance_history(year, month);
 
 CREATE TABLE IF NOT EXISTS unit_conversions (
     from_unit TEXT NOT NULL,
@@ -104,16 +102,26 @@ CREATE INDEX IF NOT EXISTS idx_market_prices_item_date
 	return err
 }
 
-func AddAccount(db *sql.DB, name, parentID string) (string, error) {
-	id := uuid.NewString()
-	_, err := db.Exec("INSERT INTO accounts(id,name,parent_uuid) VALUES(?,?,?)", id, name, sql.NullString{String: parentID, Valid: parentID != ""})
-	return id, err
+func AddAccount(db *sql.DB, name, parentUUID string) (*Account, error) {
+	uuid := uuid.NewString()
+	_, err := db.Exec("INSERT INTO accounts(uuid,name,parent_uuid) VALUES(?,?,?)", uuid, name, sql.NullString{String: parentUUID, Valid: parentUUID != ""})
+
+	return &Account{
+		UUID:   uuid,
+		Name:   name,
+		Parent: nil,
+	}, err
 }
 
-func AddItem(db *sql.DB, name, unit, description string) (string, error) {
-	id := uuid.NewString()
-	_, err := db.Exec("INSERT INTO items(id,name,unit,description) VALUES(?,?,?,?)", id, name, unit, description)
-	return id, err
+func AddItem(db *sql.DB, name, unit, description string) (*Item, error) {
+	uuid := uuid.NewString()
+	_, err := db.Exec("INSERT INTO items(uuid,name,unit,description) VALUES(?,?,?,?)", uuid, name, unit, description)
+	return &Item{
+		UUID:        uuid,
+		Name:        name,
+		Unit:        unit,
+		Description: description,
+	}, err
 }
 
 func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []TransactionLine) error {
@@ -121,33 +129,44 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 	if err != nil {
 		return err
 	}
-	tid := uuid.NewString()
+	defer tx.Rollback()
 
-	_, err = tx.Exec("INSERT INTO transactions(id,datetime_ms,description) VALUES(?,?,?)", tid, date.UnixMilli(), desc)
+	trUUID := uuid.NewString()
+
+	fmt.Println("inserting transaction")
+	_, err = tx.Exec("INSERT INTO transactions(uuid,datetime_ms,year,month,description) VALUES(?,?,?,?,?)", trUUID, date.UnixMilli(), date.Year(), int(date.Month()), desc)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
 
 	for _, l := range lines {
-		lid := uuid.NewString()
+		fmt.Println("inserting line")
+		lineUUID := uuid.NewString()
+		var itemUUID string
+		if l.Item != nil {
+			itemUUID = l.Item.UUID
+		} else {
+			itemUUID = ""
+		}
 		_, err := tx.Exec(
-			"INSERT INTO transaction_lines(id,transaction_uuid,account_uuid,item_uuid,quantity,unit,price,currency,note) VALUES(?,?,?,?,?,?,?,?,?)",
-			lid, tid, l.Account.UUID, sql.NullString{String: l.Item.UUID, Valid: l.Item.UUID != ""}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
+			"INSERT INTO transaction_lines(uuid,transaction_uuid,account_uuid,item_uuid,quantity,unit,price,currency,note) VALUES(?,?,?,?,?,?,?,?,?)",
+			lineUUID, trUUID, l.Account.UUID, sql.NullString{String: itemUUID, Valid: itemUUID != ""}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
 		if err != nil {
 			tx.Rollback()
 			return err
 		}
 
+		fmt.Println("finding prev qty and prev total")
 		var prevQty, prevTotal float64
 		err = tx.QueryRow(`
 			SELECT h.quantity, h.total_cost
 			FROM balance_history h
 			JOIN transactions t ON h.transaction_uuid = t.uuid
 			WHERE h.item_uuid=? AND h.account_uuid=? AND t.datetime_ms <= ?
-			ORDER BY t.datetime_ms DESC, h.id DESC
+			ORDER BY t.datetime_ms DESC
 			LIMIT 1`,
-			l.Item.UUID, l.Account.UUID, date.UnixMilli()).Scan(&prevQty, &prevTotal)
+			itemUUID, l.Account.UUID, date.UnixMilli()).Scan(&prevQty, &prevTotal)
 
 		if err == sql.ErrNoRows {
 			prevQty, prevTotal = 0, 0
@@ -163,48 +182,50 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 			avgCost = newTotal / newQty
 		}
 
-		hid := uuid.NewString()
-		_, err = tx.Exec(`INSERT INTO balance_history(id,item_uuid,account_uuid,transaction_uuid,quantity,total_cost,avg_cost)
+		fmt.Printf("new qty %v new total %v new avg cost %v. inserting balance history.\n", newQty, newTotal, avgCost)
+		histUUID := uuid.NewString()
+		_, err = tx.Exec(`INSERT INTO balance_history(uuid,item_uuid,account_uuid,transaction_uuid,quantity,total_cost,avg_cost)
 		                  VALUES(?,?,?,?,?,?,?)`,
-			hid, l.Item.UUID, l.Account.UUID, tid, newQty, newTotal, avgCost)
+			histUUID, itemUUID, l.Account.UUID, trUUID, newQty, newTotal, avgCost)
 		if err != nil {
 			tx.Rollback()
 			return err
 		}
 	}
 
+	fmt.Println("committing")
 	tx.Commit()
 	return nil
 }
 
 func SetMarketPrice(db *sql.DB, itemUUID string, price float64, currency string, unit string) error {
 	_, err := db.Exec(`
-		INSERT INTO market_prices(id,item_uuid,datetime_ms,price,currency,unit)
-		VALUES(?,?,?,?,?,?)
-	`, uuid.NewString(), itemUUID, time.Now().UnixMilli(), price, currency, unit)
+		INSERT INTO market_prices(item_uuid,datetime_ms,price,currency,unit)
+		VALUES(?,?,?,?,?)
+	`, itemUUID, time.Now().UnixMilli(), price, currency, unit)
 	return err
 }
 
 func BuildAccountTree(db *sql.DB) (map[string][]string, error) {
-	rows, err := db.Query(`SELECT id,name,parent_uuid FROM accounts`)
+	rows, err := db.Query(`SELECT uuid,name,parent_uuid FROM accounts`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	type node struct {
-		id, name, parent string
+		uuid, name, parent string
 	}
 	accMap := map[string]node{}
 	for rows.Next() {
-		var id, name string
+		var uuid, name string
 		var parent sql.NullString
-		rows.Scan(&id, &name, &parent)
+		rows.Scan(&uuid, &name, &parent)
 		parentID := ""
 		if parent.Valid {
 			parentID = parent.String
 		}
-		accMap[id] = node{id: id, name: name, parent: parentID}
+		accMap[uuid] = node{uuid: uuid, name: name, parent: parentID}
 	}
 
 	paths := map[string][]string{}
@@ -254,7 +275,8 @@ func FetchLeafBalances(db *sql.DB) ([]BalanceHistory, error) {
 		select * from (
 			select
 				a.uuid as account_uuid,
-				i.name as item,
+				i.uuid as item_uuid,
+				i.name as item_name,
 				i.unit,
 				b.quantity,
 				b.avg_cost,
@@ -264,12 +286,12 @@ func FetchLeafBalances(db *sql.DB) ([]BalanceHistory, error) {
 			from balance_history b
 			join accounts a on b.account_uuid = a.uuid
 			join transactions t on b.transaction_uuid = t.uuid
-			join transaction_lines l1 on l1.transaction_id=b.transaction_uuid and l1.account_uuid=b.account_uuid
+			join transaction_lines l1 on l1.transaction_uuid=b.transaction_uuid and l1.account_uuid=b.account_uuid
 			left join items i on b.item_uuid = i.uuid
 			left join accounts p on a.parent_uuid = p.uuid
 			order by datetime_ms desc
 		) 
-		group by account_uuid,item
+		group by account_uuid,item_uuid
 	`)
 	if err != nil {
 		return nil, err
@@ -278,11 +300,11 @@ func FetchLeafBalances(db *sql.DB) ([]BalanceHistory, error) {
 
 	var balances []BalanceHistory
 	for rows.Next() {
-		var itemUUID, unit sql.NullString
+		var itemUUID, itemName, unit sql.NullString
 		var accUUID, desc string
 		var date int64
 		var qty, avgCost, value float64
-		if err := rows.Scan(&accUUID, &itemUUID, &unit, &qty, &avgCost, &value, &date, &desc); err != nil {
+		if err := rows.Scan(&accUUID, &itemUUID, &itemName, &unit, &qty, &avgCost, &value, &date, &desc); err != nil {
 			return nil, err
 		}
 		h := BalanceHistory{
@@ -296,7 +318,7 @@ func FetchLeafBalances(db *sql.DB) ([]BalanceHistory, error) {
 			Description: desc,
 		}
 		h.Account.UUID = accUUID
-		h.Item.UUID = itemUUID.String
+		h.Item.Name = itemName.String
 		balances = append(balances, h)
 	}
 	return balances, nil

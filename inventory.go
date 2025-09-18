@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	_ "github.com/vmihailenco/msgpack/v5"
 )
@@ -93,7 +94,12 @@ func RollupBalances(balances []BalanceHistory, paths map[string][]string) map[st
 	result := map[string]BalanceHistory{}
 	for _, b := range balances {
 		path := paths[b.Account.UUID]
-		itemName := ""
+		var itemName string
+		if b.Item != nil {
+			itemName = b.Item.Name
+		} else {
+			itemName = ""
+		}
 		for i := 1; i <= len(path); i++ {
 			key := strings.Join(path[:i], " > ") + " " + itemName
 			agg := result[key]
@@ -127,7 +133,7 @@ func PrintBalances(db *sql.DB) error {
 	for i := range keys {
 		k := keys[i]
 		b := rolled[k]
-		fmt.Printf("%s | Qty %.2f | Value %.2f | as of %d\n", k, b.Quantity, b.Value, b.DatetimeMs)
+		fmt.Printf("%s | Qty %.2f | Value %.2f | as of %v\n", k, b.Quantity, b.Value, time.UnixMilli(b.DatetimeMs))
 	}
 	return nil
 }
