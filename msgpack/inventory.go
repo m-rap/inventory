@@ -83,6 +83,15 @@ type Packet struct {
 	Body map[string][]byte `msgpack:"body,omitempty"`
 }
 
+func NewPacket(pkt *inventoryrpc.Packet) Packet {
+	return Packet{
+		ID:   pkt.ID,
+		Type: pkt.Type,
+		Meta: pkt.Meta,
+		Body: pkt.Body,
+	}
+}
+
 func ToInvPacket(pkt *Packet) inventoryrpc.Packet {
 	return inventoryrpc.Packet{
 		ID:   pkt.ID,

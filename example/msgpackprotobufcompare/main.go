@@ -15,7 +15,7 @@ import (
 
 type ExampleInterface interface {
 	OnMarshalItem(item *inventory.Item) ([]byte, error)
-	OnMarshalPkt(itemBin []byte) ([]byte, error)
+	OnMarshalPkt(pkt *inventoryrpc.Packet) ([]byte, error)
 	OnUnmarshalPkt(receivedPktBin []byte) (inventoryrpc.Packet, error)
 	OnUnmarshalItem(receivedItemBin []byte) (inventory.Item, error)
 }
@@ -30,17 +30,9 @@ func (e *ExampleMsgpack) OnMarshalItem(item *inventory.Item) ([]byte, error) {
 	return msgpack.Marshal(&it)
 }
 
-func (e *ExampleMsgpack) OnMarshalPkt(itemBin []byte) ([]byte, error) {
-	pkt := inventorymsgpack.Packet{
-		ID:   0,
-		Type: inventoryrpc.TypeReq,
-		Meta: nil,
-		Body: map[string][]byte{
-			"function": []byte("InsertItem"),
-			"item":     itemBin,
-		},
-	}
-	return msgpack.Marshal(&pkt)
+func (e *ExampleMsgpack) OnMarshalPkt(pkt *inventoryrpc.Packet) ([]byte, error) {
+	msgpackPkt := inventorymsgpack.NewPacket(pkt)
+	return msgpack.Marshal(&msgpackPkt)
 }
 
 func (e *ExampleMsgpack) OnUnmarshalPkt(receivedPktBin []byte) (inventoryrpc.Packet, error) {
@@ -66,17 +58,9 @@ func (e *ExampleProtobuf) OnMarshalItem(item *inventory.Item) ([]byte, error) {
 	return proto.Marshal(&it)
 }
 
-func (e *ExampleProtobuf) OnMarshalPkt(itemBin []byte) ([]byte, error) {
-	pkt := inventorypb.Packet{
-		ID:   0,
-		Type: inventoryrpc.TypeReq,
-		Meta: nil,
-		Body: map[string][]byte{
-			"function": []byte("InsertItem"),
-			"item":     itemBin,
-		},
-	}
-	return proto.Marshal(&pkt)
+func (e *ExampleProtobuf) OnMarshalPkt(pkt *inventoryrpc.Packet) ([]byte, error) {
+	pbPkt := inventorypb.NewPacket(pkt)
+	return proto.Marshal(&pbPkt)
 }
 
 func (e *ExampleProtobuf) OnUnmarshalPkt(receivedPktBin []byte) (inventoryrpc.Packet, error) {
@@ -99,7 +83,17 @@ func doExample(e ExampleInterface) []byte {
 		log.Fatal(err)
 	}
 
-	pktBin, err := e.OnMarshalPkt(itemBin)
+	pkt := inventoryrpc.Packet{
+		ID:   0,
+		Type: inventoryrpc.TypeReq,
+		Meta: nil,
+		Body: map[string][]byte{
+			"function": []byte("InsertItem"),
+			"item":     itemBin,
+		},
+	}
+
+	pktBin, err := e.OnMarshalPkt(&pkt)
 	if err != nil {
 		log.Fatal(err)
 	}
