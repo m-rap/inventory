@@ -1,5 +1,10 @@
 package inventorymsgpack
 
+import (
+	"inventory"
+	"inventoryrpc"
+)
+
 type Item struct {
 	ID          int    `msgpack:"id,omitempty"`
 	UUID        string `msgpack:"uuid,omitempty"`
@@ -69,4 +74,40 @@ type MarketPrices struct {
 	Price      float64 `msgpack:"price,omitempty"`
 	Unit       string  `msgpack:"unit,omitempty"`
 	Currency   string  `msgpack:"currency,omitempty"`
+}
+
+type Packet struct {
+	ID   int               `msgpack:"id,omitempty"`
+	Type int16             `msgpack:"type,omitempty"`
+	Meta map[string][]byte `msgpack:"meta,omitempty"`
+	Body map[string][]byte `msgpack:"body,omitempty"`
+}
+
+func ToInvPacket(pkt *Packet) inventoryrpc.Packet {
+	return inventoryrpc.Packet{
+		ID:   pkt.ID,
+		Type: pkt.Type,
+		Meta: pkt.Meta,
+		Body: pkt.Body,
+	}
+}
+
+func NewItem(item *inventory.Item) Item {
+	return Item{
+		ID:          item.ID,
+		UUID:        item.UUID,
+		Name:        item.Name,
+		Description: item.Description,
+		Unit:        item.Unit,
+	}
+}
+
+func ToInvItem(item *Item) inventory.Item {
+	return inventory.Item{
+		ID:          item.ID,
+		UUID:        item.UUID,
+		Name:        item.Name,
+		Description: item.Description,
+		Unit:        item.Unit,
+	}
 }

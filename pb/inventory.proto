@@ -4,7 +4,7 @@ package inventorypb;
 option go_package = "inventory/inventorypb";
 
 message Item {
-	int32 ID = 1;
+	sint32 ID = 1;
 	string UUID = 2;
 	string Name = 3;
 	string Description = 4;
@@ -12,14 +12,14 @@ message Item {
 }
 
 message Transaction {
-	int32 ID = 1;
+	sint32 ID = 1;
 	string UUID = 2;
 	string Description = 3;
-	int64 DatetimeMs = 4;
+	sint64 DatetimeMs = 4;
 }
 
 message TransactionLine {
-	int32 ID = 1;
+	sint32 ID = 1;
 	string TransactionUUID = 2;
 	string AccountUUID = 3;
 	string ItemUUID = 4;
@@ -31,7 +31,7 @@ message TransactionLine {
 }
 
 message BalanceHistory {
-	int32 ID = 1;
+	sint32 ID = 1;
 	repeated string Path = 2;
 	string AccountUUID = 3;
 	string ItemUUID = 4;
@@ -39,7 +39,7 @@ message BalanceHistory {
 	double Quantity = 6;
 	double AvgCost = 7;
 	double Value = 8;
-	int64 DatetimeMs = 9;
+	sint64 DatetimeMs = 9;
 	double Price = 10;
 	string Currency = 11;
 	double MarketValue = 12;
@@ -50,21 +50,28 @@ message UnitConversions {
 	string FromUnit = 1;
 	string ToUnit = 2;
 	double Factor = 3;
-	int64 DatetimeMs = 4;
+	sint64 DatetimeMs = 4;
 }
 
 message CurrencyConversions {
 	string FromCurrency = 1;
 	string ToCurrency = 2;
 	double Rate = 3;
-	int64 DatetimeMs = 4;
+	sint64 DatetimeMs = 4;
 }
 
 message MarketPrices {
-	int32 ID = 1;
+	sint32 ID = 1;
 	string ItemUUID = 2;
-	int64 DatetimeMs = 3;
+	sint64 DatetimeMs = 3;
 	double Price = 4;
 	string Unit = 5;
 	string Currency = 6;
+}
+
+message Packet {
+	sint32 ID = 1;
+	sint32 Type = 2;
+	map<string, bytes> Meta = 3;
+	map<string, bytes> Body = 4;
 }

@@ -15,21 +15,22 @@ const (
 	TypeResp = 1
 )
 
-type Packet struct {
-	ID       int
-	Type     int16
-	Meta     []byte // in msgpack or protobuf format
-	Length   int
-	Body     []byte // in msgpack or protobuf format
-	Checksum uint32
+type PacketWrapper struct {
+	Length      int
+	PacketBytes []byte
+	Checksum    uint32
 }
 
-func EncodePacket(id int, pType int16, meta []byte, body []byte) ([]byte, error) {
-	pkt := Packet{
-		ID:   id,
-		Type: pType,
-		Meta: meta,
-		Body: body,
+type Packet struct {
+	ID   int
+	Type int16
+	Meta map[string][]byte
+	Body map[string][]byte
+}
+
+func EncodePacketWrapper(packet []byte) ([]byte, error) {
+	pkt := PacketWrapper{
+		PacketBytes: packet,
 	}
 
 	// msgPackData := PacketMsgPack{}
@@ -47,9 +48,9 @@ func EncodePacket(id int, pType int16, meta []byte, body []byte) ([]byte, error)
 
 	buf := bytes.Buffer{}
 	buf.Write(PacketMagic) // magic
-	binary.LittleEndian.PutUint32(tmpB4, uint32(2+4+len(pkt.Body)+4))
+	binary.LittleEndian.PutUint32(tmpB4, uint32(2+4+len(pkt.PacketBytes)+4))
 	buf.Write(tmpB4) // length
-	buf.Write(pkt.Body)
+	buf.Write(pkt.PacketBytes)
 	data := buf.Bytes()
 	crc := crc32.ChecksumIEEE(data)
 	binary.LittleEndian.PutUint32(tmpB4, crc)
@@ -62,10 +63,10 @@ type PacketBuffer struct {
 	buf bytes.Buffer
 }
 
-func (pb *PacketBuffer) Feed(data []byte) ([]*Packet, error) {
+func (pb *PacketBuffer) Feed(data []byte) ([]*PacketWrapper, error) {
 	pb.buf.Write(data)
 
-	var results []*Packet
+	var results []*PacketWrapper
 	// dec := msgpack.NewDecoder(&pb.buf)
 
 	for {
@@ -73,7 +74,7 @@ func (pb *PacketBuffer) Feed(data []byte) ([]*Packet, error) {
 			break
 		}
 
-		pkt := new(Packet)
+		pkt := new(PacketWrapper)
 		b := pb.buf.Bytes()
 
 		if b[0] != PacketMagic[0] || b[1] != PacketMagic[1] {
@@ -101,14 +102,14 @@ func (pb *PacketBuffer) Feed(data []byte) ([]*Packet, error) {
 			continue
 		}
 
-		body := b[6 : length-4]
+		packetBytes := b[6 : length-4]
 		// err := msgpack.NewDecoder(bytes.NewReader(msgPackData)).Decode(&pkt.Body)
 		// if err != nil {
 		// 	pb.buf.Next(int(length))
 		// 	return results, err
 		// }
 
-		pkt.Body = body
+		pkt.PacketBytes = packetBytes
 		pkt.Checksum = checksum
 		pkt.Length = int(length)
 
