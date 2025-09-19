@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	_ "github.com/vmihailenco/msgpack/v5"
 )
 
@@ -14,14 +15,28 @@ import (
 
 type Account struct {
 	ID     int
-	UUID   string
+	UUID   uuid.UUID
 	Name   string
 	Parent *Account
 }
 
+func (a *Account) IsChildOfOrItself(parent *Account) bool {
+	if parent == nil {
+		return false
+	}
+	tmp := a
+	for tmp != nil {
+		if tmp == parent {
+			return true
+		}
+		tmp = tmp.Parent
+	}
+	return false
+}
+
 type Item struct {
 	ID          int
-	UUID        string
+	UUID        uuid.UUID
 	Name        string
 	Description string
 	Unit        string
@@ -29,7 +44,7 @@ type Item struct {
 
 type Transaction struct {
 	ID          int
-	UUID        string
+	UUID        uuid.UUID
 	Description string
 	DatetimeMs  int64
 	Year        int
@@ -90,10 +105,11 @@ type MarketPrices struct {
 	Currency   string
 }
 
-func RollupBalances(balances []BalanceHistory, paths map[string][]string) map[string]BalanceHistory {
+func RollupBalances(balances []BalanceHistory, paths map[int][]string) map[string]BalanceHistory {
+	// fmt.Println("enter rollup balances")
 	result := map[string]BalanceHistory{}
 	for _, b := range balances {
-		path := paths[b.Account.UUID]
+		path := paths[b.Account.ID]
 		var itemName string
 		if b.Item != nil {
 			itemName = b.Item.Name
@@ -107,21 +123,26 @@ func RollupBalances(balances []BalanceHistory, paths map[string][]string) map[st
 			agg.Quantity += b.Quantity
 			agg.Value += b.Value
 			agg.DatetimeMs = b.DatetimeMs
+			agg.Account = b.Account
 			result[key] = agg
 		}
 	}
+	// fmt.Println("exit rollup balances")
 	return result
 }
 
 func PrintBalances(db *sql.DB) error {
-	leaf, err := FetchLeafBalances(db)
+	// fmt.Println("building account tree")
+	paths, accMap, err := BuildAccountTree(db)
 	if err != nil {
 		return err
 	}
-	paths, err := BuildAccountTree(db)
+	// fmt.Println("fetching leaf balances")
+	leaf, err := FetchLeafBalances(db, accMap)
 	if err != nil {
 		return err
 	}
+	// fmt.Println("rolling up balances")
 	rolled := RollupBalances(leaf, paths)
 
 	fmt.Println("=== Historical Cost Balances ===")
@@ -133,15 +154,26 @@ func PrintBalances(db *sql.DB) error {
 	for i := range keys {
 		k := keys[i]
 		b := rolled[k]
-		fmt.Printf("%s | Qty %.2f | Value %.2f | as of %v\n", k, b.Quantity, b.Value, time.UnixMilli(b.DatetimeMs))
+		var normQty, normVal float64
+		if b.Account != nil &&
+			(b.Account.IsChildOfOrItself(LiabilityAcc) ||
+				b.Account.IsChildOfOrItself(EquityAcc) ||
+				b.Account.IsChildOfOrItself(IncomeAcc)) {
+			normQty = -b.Quantity
+			normVal = -b.Value
+		} else {
+			normQty = b.Quantity
+			normVal = b.Value
+		}
+		fmt.Printf("%s | Qty %.2f | Value %.2f | as of %v\n", k, normQty, normVal, time.UnixMilli(b.DatetimeMs))
 	}
 	return nil
 }
 
-func RollupMarketBalances(balances []BalanceHistory, paths map[string][]string) map[string]BalanceHistory {
+func RollupMarketBalances(balances []BalanceHistory, paths map[int][]string) map[string]BalanceHistory {
 	result := map[string]BalanceHistory{}
 	for _, b := range balances {
-		path := paths[b.Account.UUID]
+		path := paths[b.Account.ID]
 		itemName := ""
 		for i := 1; i <= len(path); i++ {
 			key := strings.Join(path[:i], " > ") + itemName
@@ -162,7 +194,7 @@ func PrintMarketBalances(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	paths, err := BuildAccountTree(db)
+	paths, _, err := BuildAccountTree(db)
 	if err != nil {
 		return err
 	}

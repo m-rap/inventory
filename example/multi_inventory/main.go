@@ -16,85 +16,89 @@ var (
 	// finishedProductUUID, cashUUID, equityUUID, expenseUUID, matPurchaseUUID, equipmentPurchaseUUID,
 	// incomeUUID, financialIncomeUUID, nonFinancialIncomeUUID string
 	// steelUUID, woodUUID, widget1UUID, widget2UUID string
-	assetAcc, inventoryAcc, rawMaterialAcc, workInProgressAcc,
-	finishedProductAcc, cashAcc, equityAcc, expenseAcc, matPurchaseAcc, equipmentPurchaseAcc,
-	incomeAcc, financialIncomeAcc, nonFinancialIncomeAcc *inventory.Account
+	inventoryAcc, rawMaterialAcc, workInProgressAcc,
+	finishedProductAcc, cashAcc, matPurchaseAcc, equipmentPurchaseAcc,
+	nonFinancialIncomeAcc *inventory.Account
 	steelItem, woodItem, widget1Item, widget2Item *inventory.Item
 )
 
 func createAccountsAndItems(db *sql.DB) error {
 	// Account hierarchy
 	var err error
-	assetAcc, err = inventory.AddAccount(db, "asset", "")
+	var sUuid []byte
+
+	sUuid, err = inventory.AddAccount(db, "non-financial income", nil)
 	if err != nil {
 		return err
 	}
-	inventoryAcc, err = inventory.AddAccount(db, "inventory", assetAcc.UUID)
+	nonFinancialIncomeAcc, _ = inventory.GetAccountFromUUID(db, sUuid)
+
+	sUuid, err = inventory.AddAccount(db, "inventory", inventory.AssetAcc.UUID[:])
 	if err != nil {
 		return err
 	}
-	nonFinancialIncomeAcc, err = inventory.AddAccount(db, "non-financial income", inventoryAcc.UUID)
+	inventoryAcc, _ = inventory.GetAccountFromUUID(db, sUuid)
+
+	sUuid, err = inventory.AddAccount(db, "raw material", inventoryAcc.UUID[:])
 	if err != nil {
 		return err
 	}
-	rawMaterialAcc, err = inventory.AddAccount(db, "raw material", inventoryAcc.UUID)
+	rawMaterialAcc, _ = inventory.GetAccountFromUUID(db, sUuid)
+
+	sUuid, err = inventory.AddAccount(db, "work in progress", inventoryAcc.UUID[:])
 	if err != nil {
 		return err
 	}
-	workInProgressAcc, err = inventory.AddAccount(db, "work in progress", inventoryAcc.UUID)
+	workInProgressAcc, _ = inventory.GetAccountFromUUID(db, sUuid)
+
+	sUuid, err = inventory.AddAccount(db, "finished product", inventoryAcc.UUID[:])
 	if err != nil {
 		return err
 	}
-	finishedProductAcc, err = inventory.AddAccount(db, "finished product", inventoryAcc.UUID)
+	finishedProductAcc, _ = inventory.GetAccountFromUUID(db, sUuid)
+
+	sUuid, err = inventory.AddAccount(db, "cash", inventory.AssetAcc.UUID[:])
 	if err != nil {
 		return err
 	}
-	cashAcc, err = inventory.AddAccount(db, "cash", assetAcc.UUID)
+	cashAcc, _ = inventory.GetAccountFromUUID(db, sUuid)
+
+	sUuid, err = inventory.AddAccount(db, "material purchase", inventory.ExpenseAcc.UUID[:])
 	if err != nil {
 		return err
 	}
-	equityAcc, err = inventory.AddAccount(db, "equity", "")
+	matPurchaseAcc, _ = inventory.GetAccountFromUUID(db, sUuid)
+
+	sUuid, err = inventory.AddAccount(db, "equipment purchase", inventory.ExpenseAcc.UUID[:])
 	if err != nil {
 		return err
 	}
-	expenseAcc, err = inventory.AddAccount(db, "expense", "")
-	if err != nil {
-		return err
-	}
-	matPurchaseAcc, err = inventory.AddAccount(db, "material purchase", expenseAcc.UUID)
-	if err != nil {
-		return err
-	}
-	equipmentPurchaseAcc, err = inventory.AddAccount(db, "equipment purchase", expenseAcc.UUID)
-	if err != nil {
-		return err
-	}
-	incomeAcc, err = inventory.AddAccount(db, "income", "")
-	if err != nil {
-		return err
-	}
-	financialIncomeAcc, err = inventory.AddAccount(db, "financial income", incomeAcc.UUID)
-	if err != nil {
-		return err
-	}
+	equipmentPurchaseAcc, _ = inventory.GetAccountFromUUID(db, sUuid)
 
 	// Items
-	steelItem, err = inventory.AddItem(db, "steel", "kg", "")
+	sUuid, err = inventory.AddItem(db, "steel", "kg", "")
 	if err != nil {
 		return err
 	}
-	woodItem, err = inventory.AddItem(db, "wood", "kg", "")
+	steelItem, _ = inventory.GetItemFromUUID(db, sUuid)
+
+	sUuid, err = inventory.AddItem(db, "wood", "kg", "")
 	if err != nil {
 		return err
 	}
-	widget1Item, err = inventory.AddItem(db, "widget 1", "pcs", "")
+	woodItem, _ = inventory.GetItemFromUUID(db, sUuid)
+
+	sUuid, err = inventory.AddItem(db, "widget 1", "pcs", "")
 	if err != nil {
 		return err
 	}
-	widget2Item, err = inventory.AddItem(db, "widget 1", "pcs", "")
+	widget1Item, _ = inventory.GetItemFromUUID(db, sUuid)
+
+	sUuid, err = inventory.AddItem(db, "widget 1", "pcs", "")
 	if err != nil {
 		return err
 	}
+	widget2Item, _ = inventory.GetItemFromUUID(db, sUuid)
 
 	return nil
 }
@@ -128,8 +132,8 @@ func main() {
 	fmt.Println("apply transactions")
 	// Transaction: Owner invests 1000 USD equity → Cash
 	err = inventory.ApplyTransaction(db, "Owner Investment", time.Date(2025, 9, 1, 0, 0, 0, 0, time.Local), []inventory.TransactionLine{
-		{Account: cashAcc, Item: nil, Quantity: 1000, Unit: "USD", Price: 1, Currency: "USD"},    // Cash
-		{Account: equityAcc, Item: nil, Quantity: -1000, Unit: "USD", Price: 1, Currency: "USD"}, // Equity
+		{Account: cashAcc, Item: nil, Quantity: 1000, Unit: "USD", Price: 1, Currency: "USD"},              // Cash
+		{Account: inventory.EquityAcc, Item: nil, Quantity: -1000, Unit: "USD", Price: 1, Currency: "USD"}, // Equity
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -179,7 +183,7 @@ func main() {
 
 	fmt.Println("update market price")
 	// Market prices
-	err = inventory.SetMarketPrice(db, steelItem.UUID, 8, "USD", "kg") // steel now 8 USD/kg
+	err = inventory.SetMarketPrice(db, steelItem.UUID[:], 8, "USD", "kg") // steel now 8 USD/kg
 	if err != nil {
 		log.Fatal(err)
 	}
