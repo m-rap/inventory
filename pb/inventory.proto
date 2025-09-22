@@ -3,26 +3,33 @@ syntax = "proto3";
 package inventorypb;
 option go_package = "inventory/inventorypb";
 
+message Account {
+	bytes UUID = 1;
+	string Name = 2;
+	bytes ParentUUID = 3;
+	repeated TransactionLine TransactionLines = 4;
+}
+
 message Item {
-	sint32 ID = 1;
-	string UUID = 2;
-	string Name = 3;
-	string Description = 4;
-	string Unit = 5;
+	bytes UUID = 1;
+	string Name = 2;
+	string Description = 3;
+	string Unit = 4;
+	repeated TransactionLine TransactionLines = 5;
 }
 
 message Transaction {
-	sint32 ID = 1;
-	string UUID = 2;
-	string Description = 3;
-	sint64 DatetimeMs = 4;
+	bytes UUID = 1;
+	string Description = 2;
+	sint64 DatetimeMs = 3;
+	repeated TransactionLine TransactionLines = 4;
 }
 
 message TransactionLine {
-	sint32 ID = 1;
-	string TransactionUUID = 2;
-	string AccountUUID = 3;
-	string ItemUUID = 4;
+	bytes UUID = 1;
+	bytes TransactionUUID = 2;
+	bytes AccountUUID = 3;
+	bytes ItemUUID = 4;
 	double Quantity = 5;
 	string Unit = 6;
 	double Price = 7;
@@ -30,17 +37,24 @@ message TransactionLine {
 	string Note = 9;
 }
 
+message BalanceHistoryReferences {
+	bytes TransactionLineUUID = 1;
+	bytes TransactionUUID = 2;
+	bytes AccountUUID = 3;
+	bytes ItemUUID = 4;
+}
+
 message BalanceHistory {
-	sint32 ID = 1;
+	bytes UUID = 1;
 	repeated string Path = 2;
-	string AccountUUID = 3;
-	string ItemUUID = 4;
-	string Unit = 5;
-	double Quantity = 6;
-	double AvgCost = 7;
-	double Value = 8;
-	sint64 DatetimeMs = 9;
-	double Price = 10;
+	BalanceHistoryReferences references = 3;
+	bytes Unit = 4;
+	double Quantity = 5;
+	double AvgCost = 6;
+	double Value = 7;
+	sint64 DatetimeMs = 8;
+	double TransactionPrice = 9;
+	double MarketPrice = 10;
 	string Currency = 11;
 	double MarketValue = 12;
 	string Description = 13;
@@ -61,16 +75,15 @@ message CurrencyConversions {
 }
 
 message MarketPrices {
-	sint32 ID = 1;
-	string ItemUUID = 2;
-	sint64 DatetimeMs = 3;
-	double Price = 4;
-	string Unit = 5;
-	string Currency = 6;
+	bytes ItemUUID = 1;
+	sint64 DatetimeMs = 2;
+	double Price = 3;
+	string Unit = 4;
+	string Currency = 5;
 }
 
 message Packet {
-	sint32 ID = 1;
+	bytes UUID = 1;
 	sint32 Type = 2;
 	map<string, bytes> Meta = 3;
 	map<string, bytes> Body = 4;

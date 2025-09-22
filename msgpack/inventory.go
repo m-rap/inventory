@@ -3,31 +3,37 @@ package inventorymsgpack
 import (
 	"inventory"
 	"inventoryrpc"
+
+	"github.com/google/uuid"
 )
 
+type Account struct {
+	UUID             []byte            `msgpack:"uuid,omitempty"`
+	Name             string            `msgpack:"name,omitempty"`
+	ParentUUID       []byte            `msgpack:"parent,omitempty"`
+	TransactionLines []TransactionLine `msgpack:"transaction_lines,omitempty"`
+}
+
 type Item struct {
-	ID          int    `msgpack:"id,omitempty"`
-	UUID        string `msgpack:"uuid,omitempty"`
-	Name        string `msgpack:"name,omitempty"`
-	Description string `msgpack:"description,omitempty"`
-	Unit        string `msgpack:"unit,omitempty"`
+	UUID             []byte            `msgpack:"uuid,omitempty"`
+	Name             string            `msgpack:"name,omitempty"`
+	Description      string            `msgpack:"description,omitempty"`
+	Unit             string            `msgpack:"unit,omitempty"`
+	TransactionLines []TransactionLine `msgpack:"transaction_lines,omitempty"`
 }
 
 type Transaction struct {
-	ID          int               `msgpack:"id,omitempty"`
-	UUID        string            `msgpack:"uuid,omitempty"`
-	Description string            `msgpack:"description,omitempty"`
-	DatetimeMs  int64             `msgpack:"date,omitempty"`
-	Year        int               `msgpack:"year,omitempty"`
-	Month       uint8             `msgpack:"month,omitempty"`
-	Lines       []TransactionLine `msgpack:"lines,omitempty"`
+	UUID             []byte            `msgpack:"uuid,omitempty"`
+	Description      string            `msgpack:"description,omitempty"`
+	DatetimeMs       int64             `msgpack:"date,omitempty"`
+	TransactionLines []TransactionLine `msgpack:"transaction_lines,omitempty"`
 }
 
 type TransactionLine struct {
-	ID              int     `msgpack:"id,omitempty"`
-	TransactionUUID string  `msgpack:"transaction_uuid,omitempty"`
-	AccountUUID     string  `msgpack:"account_uuid,omitempty"`
-	ItemUUID        string  `msgpack:"item_uuid,omitempty"`
+	UUID            []byte  `msgpack:"uuid,omitempty"`
+	TransactionUUID []byte  `msgpack:"transaction_uuid,omitempty"`
+	AccountUUID     []byte  `msgpack:"account_uuid,omitempty"`
+	ItemUUID        []byte  `msgpack:"item_uuid,omitempty"`
 	Quantity        float64 `msgpack:"quantity,omitempty"`
 	Unit            string  `msgpack:"unit,omitempty"`
 	Price           float64 `msgpack:"price,omitempty"`
@@ -35,22 +41,27 @@ type TransactionLine struct {
 	Note            string  `msgpack:"note,omitempty"`
 }
 
+type BalanceHistoryReferences struct {
+	TransactionLineUUID []byte `msgpack:"transaction_line,omitempty"`
+	TransactionUUID     []byte `msgpack:"transaction_uuid,omitempty"`
+	AccountUUID         []byte `msgpack:"account_uuid,omitempty"`
+	ItemUUID            []byte `msgpack:"item_uuid,omitempty"`
+}
+
 type BalanceHistory struct {
-	ID          int      `msgpack:"id,omitempty"`
-	Path        []string `msgpack:"path,omitempty"`
-	AccountUUID string   `msgpack:"account_uuid,omitempty"`
-	ItemUUID    string   `msgpack:"item_uuid,omitempty"`
-	Unit        string   `msgpack:"unit,omitempty"`
-	Quantity    float64  `msgpack:"quantity,omitempty"`
-	AvgCost     float64  `msgpack:"avg_cost,omitempty"`
-	Value       float64  `msgpack:"value,omitempty"`
-	DatetimeMs  int64    `msgpack:"date,omitempty"`
-	Year        int      `msgpack:"year,omitempty"`
-	Month       uint8    `msgpack:"month,omitempty"`
-	Price       float64  `msgpack:"price,omitempty"`
-	Currency    string   `msgpack:"currency,omitempty"`
-	MarketValue float64  `msgpack:"market_value,omitempty"`
-	Description string   `msgpack:"description,omitempty"`
+	UUID             []byte                   `msgpack:"uuid,omitempty"`
+	Path             []string                 `msgpack:"path,omitempty"`
+	References       BalanceHistoryReferences `msgpack:"references,omitempty"`
+	Unit             string                   `msgpack:"unit,omitempty"`
+	Quantity         float64                  `msgpack:"quantity,omitempty"`
+	AvgCost          float64                  `msgpack:"avg_cost,omitempty"`
+	Value            float64                  `msgpack:"value,omitempty"`
+	DatetimeMs       int64                    `msgpack:"date,omitempty"`
+	TransactionPrice float64                  `msgpack:"transaction_price,omitempty"`
+	MarketPrice      float64                  `msgpack:"market_price,omitempty"`
+	Currency         string                   `msgpack:"currency,omitempty"`
+	MarketValue      float64                  `msgpack:"market_value,omitempty"`
+	Description      string                   `msgpack:"description,omitempty"`
 }
 
 type UnitConversions struct {
@@ -68,8 +79,7 @@ type CurrencyConversions struct {
 }
 
 type MarketPrices struct {
-	ID         int     `msgpack:"id,omitempty"`
-	ItemUUID   string  `msgpack:"item_uuid,omitempty"`
+	ItemUUID   []byte  `msgpack:"item_uuid,omitempty"`
 	DatetimeMs int64   `msgpack:"date,omitempty"`
 	Price      float64 `msgpack:"price,omitempty"`
 	Unit       string  `msgpack:"unit,omitempty"`
@@ -77,7 +87,7 @@ type MarketPrices struct {
 }
 
 type Packet struct {
-	ID   int               `msgpack:"id,omitempty"`
+	UUID []byte            `msgpack:"uuid,omitempty"`
 	Type int16             `msgpack:"type,omitempty"`
 	Meta map[string][]byte `msgpack:"meta,omitempty"`
 	Body map[string][]byte `msgpack:"body,omitempty"`
@@ -85,7 +95,7 @@ type Packet struct {
 
 func NewPacket(pkt *inventoryrpc.Packet) Packet {
 	return Packet{
-		ID:   pkt.ID,
+		UUID: pkt.UUID[:],
 		Type: pkt.Type,
 		Meta: pkt.Meta,
 		Body: pkt.Body,
@@ -93,28 +103,54 @@ func NewPacket(pkt *inventoryrpc.Packet) Packet {
 }
 
 func ToInvPacket(pkt *Packet) inventoryrpc.Packet {
+	pktUUID, _ := uuid.FromBytes(pkt.UUID)
 	return inventoryrpc.Packet{
-		ID:   pkt.ID,
+		UUID: pktUUID,
 		Type: pkt.Type,
 		Meta: pkt.Meta,
 		Body: pkt.Body,
 	}
 }
 
-func NewItem(item *inventory.Item) Item {
+func NewTransactionLine(transactionLine inventory.TransactionLine) TransactionLine {
+	trLine := TransactionLine{
+		UUID:     transactionLine.UUID[:],
+		Quantity: transactionLine.Quantity,
+		Unit:     transactionLine.Unit,
+		Price:    transactionLine.Price,
+		Currency: transactionLine.Currency,
+		Note:     transactionLine.Note,
+	}
+	if transactionLine.Transaction != nil {
+		trLine.TransactionUUID = transactionLine.Transaction.UUID[:]
+	}
+	if transactionLine.Account != nil {
+		trLine.AccountUUID = transactionLine.Account.UUID[:]
+	}
+	if transactionLine.Item != nil {
+		trLine.ItemUUID = transactionLine.Item.UUID[:]
+	}
+	return trLine
+}
+
+func NewItem(item *inventory.Item, transactionLines []inventory.TransactionLine) Item {
+	var lines []TransactionLine
+	for i := range transactionLines {
+		lines = append(lines, NewTransactionLine(transactionLines[i]))
+	}
 	return Item{
-		ID:          item.ID,
-		UUID:        item.UUID,
-		Name:        item.Name,
-		Description: item.Description,
-		Unit:        item.Unit,
+		UUID:             item.UUID[:],
+		Name:             item.Name,
+		Description:      item.Description,
+		Unit:             item.Unit,
+		TransactionLines: lines,
 	}
 }
 
 func ToInvItem(item *Item) inventory.Item {
+	itemUUID, _ := uuid.FromBytes(item.UUID)
 	return inventory.Item{
-		ID:          item.ID,
-		UUID:        item.UUID,
+		UUID:        itemUUID,
 		Name:        item.Name,
 		Description: item.Description,
 		Unit:        item.Unit,

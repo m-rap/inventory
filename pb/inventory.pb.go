@@ -21,20 +21,88 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Account struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	UUID             []byte                 `protobuf:"bytes,1,opt,name=UUID,proto3" json:"UUID,omitempty"`
+	Name             string                 `protobuf:"bytes,2,opt,name=Name,proto3" json:"Name,omitempty"`
+	ParentUUID       []byte                 `protobuf:"bytes,3,opt,name=ParentUUID,proto3" json:"ParentUUID,omitempty"`
+	TransactionLines []*TransactionLine     `protobuf:"bytes,4,rep,name=TransactionLines,proto3" json:"TransactionLines,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *Account) Reset() {
+	*x = Account{}
+	mi := &file_inventory_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Account) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Account) ProtoMessage() {}
+
+func (x *Account) ProtoReflect() protoreflect.Message {
+	mi := &file_inventory_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Account.ProtoReflect.Descriptor instead.
+func (*Account) Descriptor() ([]byte, []int) {
+	return file_inventory_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Account) GetUUID() []byte {
+	if x != nil {
+		return x.UUID
+	}
+	return nil
+}
+
+func (x *Account) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Account) GetParentUUID() []byte {
+	if x != nil {
+		return x.ParentUUID
+	}
+	return nil
+}
+
+func (x *Account) GetTransactionLines() []*TransactionLine {
+	if x != nil {
+		return x.TransactionLines
+	}
+	return nil
+}
+
 type Item struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ID            int32                  `protobuf:"zigzag32,1,opt,name=ID,proto3" json:"ID,omitempty"`
-	UUID          string                 `protobuf:"bytes,2,opt,name=UUID,proto3" json:"UUID,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=Name,proto3" json:"Name,omitempty"`
-	Description   string                 `protobuf:"bytes,4,opt,name=Description,proto3" json:"Description,omitempty"`
-	Unit          string                 `protobuf:"bytes,5,opt,name=Unit,proto3" json:"Unit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	UUID             []byte                 `protobuf:"bytes,1,opt,name=UUID,proto3" json:"UUID,omitempty"`
+	Name             string                 `protobuf:"bytes,2,opt,name=Name,proto3" json:"Name,omitempty"`
+	Description      string                 `protobuf:"bytes,3,opt,name=Description,proto3" json:"Description,omitempty"`
+	Unit             string                 `protobuf:"bytes,4,opt,name=Unit,proto3" json:"Unit,omitempty"`
+	TransactionLines []*TransactionLine     `protobuf:"bytes,5,rep,name=TransactionLines,proto3" json:"TransactionLines,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Item) Reset() {
 	*x = Item{}
-	mi := &file_inventory_proto_msgTypes[0]
+	mi := &file_inventory_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +114,7 @@ func (x *Item) String() string {
 func (*Item) ProtoMessage() {}
 
 func (x *Item) ProtoReflect() protoreflect.Message {
-	mi := &file_inventory_proto_msgTypes[0]
+	mi := &file_inventory_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,21 +127,14 @@ func (x *Item) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Item.ProtoReflect.Descriptor instead.
 func (*Item) Descriptor() ([]byte, []int) {
-	return file_inventory_proto_rawDescGZIP(), []int{0}
+	return file_inventory_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Item) GetID() int32 {
-	if x != nil {
-		return x.ID
-	}
-	return 0
-}
-
-func (x *Item) GetUUID() string {
+func (x *Item) GetUUID() []byte {
 	if x != nil {
 		return x.UUID
 	}
-	return ""
+	return nil
 }
 
 func (x *Item) GetName() string {
@@ -97,19 +158,26 @@ func (x *Item) GetUnit() string {
 	return ""
 }
 
+func (x *Item) GetTransactionLines() []*TransactionLine {
+	if x != nil {
+		return x.TransactionLines
+	}
+	return nil
+}
+
 type Transaction struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ID            int32                  `protobuf:"zigzag32,1,opt,name=ID,proto3" json:"ID,omitempty"`
-	UUID          string                 `protobuf:"bytes,2,opt,name=UUID,proto3" json:"UUID,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=Description,proto3" json:"Description,omitempty"`
-	DatetimeMs    int64                  `protobuf:"zigzag64,4,opt,name=DatetimeMs,proto3" json:"DatetimeMs,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	UUID             []byte                 `protobuf:"bytes,1,opt,name=UUID,proto3" json:"UUID,omitempty"`
+	Description      string                 `protobuf:"bytes,2,opt,name=Description,proto3" json:"Description,omitempty"`
+	DatetimeMs       int64                  `protobuf:"zigzag64,3,opt,name=DatetimeMs,proto3" json:"DatetimeMs,omitempty"`
+	TransactionLines []*TransactionLine     `protobuf:"bytes,4,rep,name=TransactionLines,proto3" json:"TransactionLines,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Transaction) Reset() {
 	*x = Transaction{}
-	mi := &file_inventory_proto_msgTypes[1]
+	mi := &file_inventory_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -121,7 +189,7 @@ func (x *Transaction) String() string {
 func (*Transaction) ProtoMessage() {}
 
 func (x *Transaction) ProtoReflect() protoreflect.Message {
-	mi := &file_inventory_proto_msgTypes[1]
+	mi := &file_inventory_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -134,21 +202,14 @@ func (x *Transaction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Transaction.ProtoReflect.Descriptor instead.
 func (*Transaction) Descriptor() ([]byte, []int) {
-	return file_inventory_proto_rawDescGZIP(), []int{1}
+	return file_inventory_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *Transaction) GetID() int32 {
-	if x != nil {
-		return x.ID
-	}
-	return 0
-}
-
-func (x *Transaction) GetUUID() string {
+func (x *Transaction) GetUUID() []byte {
 	if x != nil {
 		return x.UUID
 	}
-	return ""
+	return nil
 }
 
 func (x *Transaction) GetDescription() string {
@@ -165,12 +226,19 @@ func (x *Transaction) GetDatetimeMs() int64 {
 	return 0
 }
 
+func (x *Transaction) GetTransactionLines() []*TransactionLine {
+	if x != nil {
+		return x.TransactionLines
+	}
+	return nil
+}
+
 type TransactionLine struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	ID              int32                  `protobuf:"zigzag32,1,opt,name=ID,proto3" json:"ID,omitempty"`
-	TransactionUUID string                 `protobuf:"bytes,2,opt,name=TransactionUUID,proto3" json:"TransactionUUID,omitempty"`
-	AccountUUID     string                 `protobuf:"bytes,3,opt,name=AccountUUID,proto3" json:"AccountUUID,omitempty"`
-	ItemUUID        string                 `protobuf:"bytes,4,opt,name=ItemUUID,proto3" json:"ItemUUID,omitempty"`
+	UUID            []byte                 `protobuf:"bytes,1,opt,name=UUID,proto3" json:"UUID,omitempty"`
+	TransactionUUID []byte                 `protobuf:"bytes,2,opt,name=TransactionUUID,proto3" json:"TransactionUUID,omitempty"`
+	AccountUUID     []byte                 `protobuf:"bytes,3,opt,name=AccountUUID,proto3" json:"AccountUUID,omitempty"`
+	ItemUUID        []byte                 `protobuf:"bytes,4,opt,name=ItemUUID,proto3" json:"ItemUUID,omitempty"`
 	Quantity        float64                `protobuf:"fixed64,5,opt,name=Quantity,proto3" json:"Quantity,omitempty"`
 	Unit            string                 `protobuf:"bytes,6,opt,name=Unit,proto3" json:"Unit,omitempty"`
 	Price           float64                `protobuf:"fixed64,7,opt,name=Price,proto3" json:"Price,omitempty"`
@@ -182,7 +250,7 @@ type TransactionLine struct {
 
 func (x *TransactionLine) Reset() {
 	*x = TransactionLine{}
-	mi := &file_inventory_proto_msgTypes[2]
+	mi := &file_inventory_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -194,7 +262,7 @@ func (x *TransactionLine) String() string {
 func (*TransactionLine) ProtoMessage() {}
 
 func (x *TransactionLine) ProtoReflect() protoreflect.Message {
-	mi := &file_inventory_proto_msgTypes[2]
+	mi := &file_inventory_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -207,35 +275,35 @@ func (x *TransactionLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionLine.ProtoReflect.Descriptor instead.
 func (*TransactionLine) Descriptor() ([]byte, []int) {
-	return file_inventory_proto_rawDescGZIP(), []int{2}
+	return file_inventory_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *TransactionLine) GetID() int32 {
+func (x *TransactionLine) GetUUID() []byte {
 	if x != nil {
-		return x.ID
+		return x.UUID
 	}
-	return 0
+	return nil
 }
 
-func (x *TransactionLine) GetTransactionUUID() string {
+func (x *TransactionLine) GetTransactionUUID() []byte {
 	if x != nil {
 		return x.TransactionUUID
 	}
-	return ""
+	return nil
 }
 
-func (x *TransactionLine) GetAccountUUID() string {
+func (x *TransactionLine) GetAccountUUID() []byte {
 	if x != nil {
 		return x.AccountUUID
 	}
-	return ""
+	return nil
 }
 
-func (x *TransactionLine) GetItemUUID() string {
+func (x *TransactionLine) GetItemUUID() []byte {
 	if x != nil {
 		return x.ItemUUID
 	}
-	return ""
+	return nil
 }
 
 func (x *TransactionLine) GetQuantity() float64 {
@@ -273,28 +341,96 @@ func (x *TransactionLine) GetNote() string {
 	return ""
 }
 
+type BalanceHistoryReferences struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	TransactionLineUUID []byte                 `protobuf:"bytes,1,opt,name=TransactionLineUUID,proto3" json:"TransactionLineUUID,omitempty"`
+	TransactionUUID     []byte                 `protobuf:"bytes,2,opt,name=TransactionUUID,proto3" json:"TransactionUUID,omitempty"`
+	AccountUUID         []byte                 `protobuf:"bytes,3,opt,name=AccountUUID,proto3" json:"AccountUUID,omitempty"`
+	ItemUUID            []byte                 `protobuf:"bytes,4,opt,name=ItemUUID,proto3" json:"ItemUUID,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *BalanceHistoryReferences) Reset() {
+	*x = BalanceHistoryReferences{}
+	mi := &file_inventory_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BalanceHistoryReferences) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BalanceHistoryReferences) ProtoMessage() {}
+
+func (x *BalanceHistoryReferences) ProtoReflect() protoreflect.Message {
+	mi := &file_inventory_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BalanceHistoryReferences.ProtoReflect.Descriptor instead.
+func (*BalanceHistoryReferences) Descriptor() ([]byte, []int) {
+	return file_inventory_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *BalanceHistoryReferences) GetTransactionLineUUID() []byte {
+	if x != nil {
+		return x.TransactionLineUUID
+	}
+	return nil
+}
+
+func (x *BalanceHistoryReferences) GetTransactionUUID() []byte {
+	if x != nil {
+		return x.TransactionUUID
+	}
+	return nil
+}
+
+func (x *BalanceHistoryReferences) GetAccountUUID() []byte {
+	if x != nil {
+		return x.AccountUUID
+	}
+	return nil
+}
+
+func (x *BalanceHistoryReferences) GetItemUUID() []byte {
+	if x != nil {
+		return x.ItemUUID
+	}
+	return nil
+}
+
 type BalanceHistory struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ID            int32                  `protobuf:"zigzag32,1,opt,name=ID,proto3" json:"ID,omitempty"`
-	Path          []string               `protobuf:"bytes,2,rep,name=Path,proto3" json:"Path,omitempty"`
-	AccountUUID   string                 `protobuf:"bytes,3,opt,name=AccountUUID,proto3" json:"AccountUUID,omitempty"`
-	ItemUUID      string                 `protobuf:"bytes,4,opt,name=ItemUUID,proto3" json:"ItemUUID,omitempty"`
-	Unit          string                 `protobuf:"bytes,5,opt,name=Unit,proto3" json:"Unit,omitempty"`
-	Quantity      float64                `protobuf:"fixed64,6,opt,name=Quantity,proto3" json:"Quantity,omitempty"`
-	AvgCost       float64                `protobuf:"fixed64,7,opt,name=AvgCost,proto3" json:"AvgCost,omitempty"`
-	Value         float64                `protobuf:"fixed64,8,opt,name=Value,proto3" json:"Value,omitempty"`
-	DatetimeMs    int64                  `protobuf:"zigzag64,9,opt,name=DatetimeMs,proto3" json:"DatetimeMs,omitempty"`
-	Price         float64                `protobuf:"fixed64,10,opt,name=Price,proto3" json:"Price,omitempty"`
-	Currency      string                 `protobuf:"bytes,11,opt,name=Currency,proto3" json:"Currency,omitempty"`
-	MarketValue   float64                `protobuf:"fixed64,12,opt,name=MarketValue,proto3" json:"MarketValue,omitempty"`
-	Description   string                 `protobuf:"bytes,13,opt,name=Description,proto3" json:"Description,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState    `protogen:"open.v1"`
+	UUID             []byte                    `protobuf:"bytes,1,opt,name=UUID,proto3" json:"UUID,omitempty"`
+	Path             []string                  `protobuf:"bytes,2,rep,name=Path,proto3" json:"Path,omitempty"`
+	References       *BalanceHistoryReferences `protobuf:"bytes,3,opt,name=references,proto3" json:"references,omitempty"`
+	Unit             []byte                    `protobuf:"bytes,4,opt,name=Unit,proto3" json:"Unit,omitempty"`
+	Quantity         float64                   `protobuf:"fixed64,5,opt,name=Quantity,proto3" json:"Quantity,omitempty"`
+	AvgCost          float64                   `protobuf:"fixed64,6,opt,name=AvgCost,proto3" json:"AvgCost,omitempty"`
+	Value            float64                   `protobuf:"fixed64,7,opt,name=Value,proto3" json:"Value,omitempty"`
+	DatetimeMs       int64                     `protobuf:"zigzag64,8,opt,name=DatetimeMs,proto3" json:"DatetimeMs,omitempty"`
+	TransactionPrice float64                   `protobuf:"fixed64,9,opt,name=TransactionPrice,proto3" json:"TransactionPrice,omitempty"`
+	MarketPrice      float64                   `protobuf:"fixed64,10,opt,name=MarketPrice,proto3" json:"MarketPrice,omitempty"`
+	Currency         string                    `protobuf:"bytes,11,opt,name=Currency,proto3" json:"Currency,omitempty"`
+	MarketValue      float64                   `protobuf:"fixed64,12,opt,name=MarketValue,proto3" json:"MarketValue,omitempty"`
+	Description      string                    `protobuf:"bytes,13,opt,name=Description,proto3" json:"Description,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *BalanceHistory) Reset() {
 	*x = BalanceHistory{}
-	mi := &file_inventory_proto_msgTypes[3]
+	mi := &file_inventory_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -306,7 +442,7 @@ func (x *BalanceHistory) String() string {
 func (*BalanceHistory) ProtoMessage() {}
 
 func (x *BalanceHistory) ProtoReflect() protoreflect.Message {
-	mi := &file_inventory_proto_msgTypes[3]
+	mi := &file_inventory_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -319,14 +455,14 @@ func (x *BalanceHistory) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BalanceHistory.ProtoReflect.Descriptor instead.
 func (*BalanceHistory) Descriptor() ([]byte, []int) {
-	return file_inventory_proto_rawDescGZIP(), []int{3}
+	return file_inventory_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *BalanceHistory) GetID() int32 {
+func (x *BalanceHistory) GetUUID() []byte {
 	if x != nil {
-		return x.ID
+		return x.UUID
 	}
-	return 0
+	return nil
 }
 
 func (x *BalanceHistory) GetPath() []string {
@@ -336,25 +472,18 @@ func (x *BalanceHistory) GetPath() []string {
 	return nil
 }
 
-func (x *BalanceHistory) GetAccountUUID() string {
+func (x *BalanceHistory) GetReferences() *BalanceHistoryReferences {
 	if x != nil {
-		return x.AccountUUID
+		return x.References
 	}
-	return ""
+	return nil
 }
 
-func (x *BalanceHistory) GetItemUUID() string {
-	if x != nil {
-		return x.ItemUUID
-	}
-	return ""
-}
-
-func (x *BalanceHistory) GetUnit() string {
+func (x *BalanceHistory) GetUnit() []byte {
 	if x != nil {
 		return x.Unit
 	}
-	return ""
+	return nil
 }
 
 func (x *BalanceHistory) GetQuantity() float64 {
@@ -385,9 +514,16 @@ func (x *BalanceHistory) GetDatetimeMs() int64 {
 	return 0
 }
 
-func (x *BalanceHistory) GetPrice() float64 {
+func (x *BalanceHistory) GetTransactionPrice() float64 {
 	if x != nil {
-		return x.Price
+		return x.TransactionPrice
+	}
+	return 0
+}
+
+func (x *BalanceHistory) GetMarketPrice() float64 {
+	if x != nil {
+		return x.MarketPrice
 	}
 	return 0
 }
@@ -425,7 +561,7 @@ type UnitConversions struct {
 
 func (x *UnitConversions) Reset() {
 	*x = UnitConversions{}
-	mi := &file_inventory_proto_msgTypes[4]
+	mi := &file_inventory_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -437,7 +573,7 @@ func (x *UnitConversions) String() string {
 func (*UnitConversions) ProtoMessage() {}
 
 func (x *UnitConversions) ProtoReflect() protoreflect.Message {
-	mi := &file_inventory_proto_msgTypes[4]
+	mi := &file_inventory_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -450,7 +586,7 @@ func (x *UnitConversions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnitConversions.ProtoReflect.Descriptor instead.
 func (*UnitConversions) Descriptor() ([]byte, []int) {
-	return file_inventory_proto_rawDescGZIP(), []int{4}
+	return file_inventory_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *UnitConversions) GetFromUnit() string {
@@ -493,7 +629,7 @@ type CurrencyConversions struct {
 
 func (x *CurrencyConversions) Reset() {
 	*x = CurrencyConversions{}
-	mi := &file_inventory_proto_msgTypes[5]
+	mi := &file_inventory_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -505,7 +641,7 @@ func (x *CurrencyConversions) String() string {
 func (*CurrencyConversions) ProtoMessage() {}
 
 func (x *CurrencyConversions) ProtoReflect() protoreflect.Message {
-	mi := &file_inventory_proto_msgTypes[5]
+	mi := &file_inventory_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -518,7 +654,7 @@ func (x *CurrencyConversions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CurrencyConversions.ProtoReflect.Descriptor instead.
 func (*CurrencyConversions) Descriptor() ([]byte, []int) {
-	return file_inventory_proto_rawDescGZIP(), []int{5}
+	return file_inventory_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CurrencyConversions) GetFromCurrency() string {
@@ -551,19 +687,18 @@ func (x *CurrencyConversions) GetDatetimeMs() int64 {
 
 type MarketPrices struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ID            int32                  `protobuf:"zigzag32,1,opt,name=ID,proto3" json:"ID,omitempty"`
-	ItemUUID      string                 `protobuf:"bytes,2,opt,name=ItemUUID,proto3" json:"ItemUUID,omitempty"`
-	DatetimeMs    int64                  `protobuf:"zigzag64,3,opt,name=DatetimeMs,proto3" json:"DatetimeMs,omitempty"`
-	Price         float64                `protobuf:"fixed64,4,opt,name=Price,proto3" json:"Price,omitempty"`
-	Unit          string                 `protobuf:"bytes,5,opt,name=Unit,proto3" json:"Unit,omitempty"`
-	Currency      string                 `protobuf:"bytes,6,opt,name=Currency,proto3" json:"Currency,omitempty"`
+	ItemUUID      []byte                 `protobuf:"bytes,1,opt,name=ItemUUID,proto3" json:"ItemUUID,omitempty"`
+	DatetimeMs    int64                  `protobuf:"zigzag64,2,opt,name=DatetimeMs,proto3" json:"DatetimeMs,omitempty"`
+	Price         float64                `protobuf:"fixed64,3,opt,name=Price,proto3" json:"Price,omitempty"`
+	Unit          string                 `protobuf:"bytes,4,opt,name=Unit,proto3" json:"Unit,omitempty"`
+	Currency      string                 `protobuf:"bytes,5,opt,name=Currency,proto3" json:"Currency,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MarketPrices) Reset() {
 	*x = MarketPrices{}
-	mi := &file_inventory_proto_msgTypes[6]
+	mi := &file_inventory_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -575,7 +710,7 @@ func (x *MarketPrices) String() string {
 func (*MarketPrices) ProtoMessage() {}
 
 func (x *MarketPrices) ProtoReflect() protoreflect.Message {
-	mi := &file_inventory_proto_msgTypes[6]
+	mi := &file_inventory_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -588,21 +723,14 @@ func (x *MarketPrices) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarketPrices.ProtoReflect.Descriptor instead.
 func (*MarketPrices) Descriptor() ([]byte, []int) {
-	return file_inventory_proto_rawDescGZIP(), []int{6}
+	return file_inventory_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *MarketPrices) GetID() int32 {
-	if x != nil {
-		return x.ID
-	}
-	return 0
-}
-
-func (x *MarketPrices) GetItemUUID() string {
+func (x *MarketPrices) GetItemUUID() []byte {
 	if x != nil {
 		return x.ItemUUID
 	}
-	return ""
+	return nil
 }
 
 func (x *MarketPrices) GetDatetimeMs() int64 {
@@ -635,7 +763,7 @@ func (x *MarketPrices) GetCurrency() string {
 
 type Packet struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ID            int32                  `protobuf:"zigzag32,1,opt,name=ID,proto3" json:"ID,omitempty"`
+	UUID          []byte                 `protobuf:"bytes,1,opt,name=UUID,proto3" json:"UUID,omitempty"`
 	Type          int32                  `protobuf:"zigzag32,2,opt,name=Type,proto3" json:"Type,omitempty"`
 	Meta          map[string][]byte      `protobuf:"bytes,3,rep,name=Meta,proto3" json:"Meta,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Body          map[string][]byte      `protobuf:"bytes,4,rep,name=Body,proto3" json:"Body,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
@@ -645,7 +773,7 @@ type Packet struct {
 
 func (x *Packet) Reset() {
 	*x = Packet{}
-	mi := &file_inventory_proto_msgTypes[7]
+	mi := &file_inventory_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -657,7 +785,7 @@ func (x *Packet) String() string {
 func (*Packet) ProtoMessage() {}
 
 func (x *Packet) ProtoReflect() protoreflect.Message {
-	mi := &file_inventory_proto_msgTypes[7]
+	mi := &file_inventory_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -670,14 +798,14 @@ func (x *Packet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Packet.ProtoReflect.Descriptor instead.
 func (*Packet) Descriptor() ([]byte, []int) {
-	return file_inventory_proto_rawDescGZIP(), []int{7}
+	return file_inventory_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *Packet) GetID() int32 {
+func (x *Packet) GetUUID() []byte {
 	if x != nil {
-		return x.ID
+		return x.UUID
 	}
-	return 0
+	return nil
 }
 
 func (x *Packet) GetType() int32 {
@@ -705,44 +833,58 @@ var File_inventory_proto protoreflect.FileDescriptor
 
 const file_inventory_proto_rawDesc = "" +
 	"\n" +
-	"\x0finventory.proto\x12\vinventorypb\"t\n" +
-	"\x04Item\x12\x0e\n" +
-	"\x02ID\x18\x01 \x01(\x11R\x02ID\x12\x12\n" +
-	"\x04UUID\x18\x02 \x01(\tR\x04UUID\x12\x12\n" +
-	"\x04Name\x18\x03 \x01(\tR\x04Name\x12 \n" +
-	"\vDescription\x18\x04 \x01(\tR\vDescription\x12\x12\n" +
-	"\x04Unit\x18\x05 \x01(\tR\x04Unit\"s\n" +
-	"\vTransaction\x12\x0e\n" +
-	"\x02ID\x18\x01 \x01(\x11R\x02ID\x12\x12\n" +
-	"\x04UUID\x18\x02 \x01(\tR\x04UUID\x12 \n" +
-	"\vDescription\x18\x03 \x01(\tR\vDescription\x12\x1e\n" +
+	"\x0finventory.proto\x12\vinventorypb\"\x9b\x01\n" +
+	"\aAccount\x12\x12\n" +
+	"\x04UUID\x18\x01 \x01(\fR\x04UUID\x12\x12\n" +
+	"\x04Name\x18\x02 \x01(\tR\x04Name\x12\x1e\n" +
 	"\n" +
-	"DatetimeMs\x18\x04 \x01(\x12R\n" +
-	"DatetimeMs\"\xff\x01\n" +
-	"\x0fTransactionLine\x12\x0e\n" +
-	"\x02ID\x18\x01 \x01(\x11R\x02ID\x12(\n" +
-	"\x0fTransactionUUID\x18\x02 \x01(\tR\x0fTransactionUUID\x12 \n" +
-	"\vAccountUUID\x18\x03 \x01(\tR\vAccountUUID\x12\x1a\n" +
-	"\bItemUUID\x18\x04 \x01(\tR\bItemUUID\x12\x1a\n" +
+	"ParentUUID\x18\x03 \x01(\fR\n" +
+	"ParentUUID\x12H\n" +
+	"\x10TransactionLines\x18\x04 \x03(\v2\x1c.inventorypb.TransactionLineR\x10TransactionLines\"\xae\x01\n" +
+	"\x04Item\x12\x12\n" +
+	"\x04UUID\x18\x01 \x01(\fR\x04UUID\x12\x12\n" +
+	"\x04Name\x18\x02 \x01(\tR\x04Name\x12 \n" +
+	"\vDescription\x18\x03 \x01(\tR\vDescription\x12\x12\n" +
+	"\x04Unit\x18\x04 \x01(\tR\x04Unit\x12H\n" +
+	"\x10TransactionLines\x18\x05 \x03(\v2\x1c.inventorypb.TransactionLineR\x10TransactionLines\"\xad\x01\n" +
+	"\vTransaction\x12\x12\n" +
+	"\x04UUID\x18\x01 \x01(\fR\x04UUID\x12 \n" +
+	"\vDescription\x18\x02 \x01(\tR\vDescription\x12\x1e\n" +
+	"\n" +
+	"DatetimeMs\x18\x03 \x01(\x12R\n" +
+	"DatetimeMs\x12H\n" +
+	"\x10TransactionLines\x18\x04 \x03(\v2\x1c.inventorypb.TransactionLineR\x10TransactionLines\"\x83\x02\n" +
+	"\x0fTransactionLine\x12\x12\n" +
+	"\x04UUID\x18\x01 \x01(\fR\x04UUID\x12(\n" +
+	"\x0fTransactionUUID\x18\x02 \x01(\fR\x0fTransactionUUID\x12 \n" +
+	"\vAccountUUID\x18\x03 \x01(\fR\vAccountUUID\x12\x1a\n" +
+	"\bItemUUID\x18\x04 \x01(\fR\bItemUUID\x12\x1a\n" +
 	"\bQuantity\x18\x05 \x01(\x01R\bQuantity\x12\x12\n" +
 	"\x04Unit\x18\x06 \x01(\tR\x04Unit\x12\x14\n" +
 	"\x05Price\x18\a \x01(\x01R\x05Price\x12\x1a\n" +
 	"\bCurrency\x18\b \x01(\tR\bCurrency\x12\x12\n" +
-	"\x04Note\x18\t \x01(\tR\x04Note\"\xe8\x02\n" +
-	"\x0eBalanceHistory\x12\x0e\n" +
-	"\x02ID\x18\x01 \x01(\x11R\x02ID\x12\x12\n" +
-	"\x04Path\x18\x02 \x03(\tR\x04Path\x12 \n" +
-	"\vAccountUUID\x18\x03 \x01(\tR\vAccountUUID\x12\x1a\n" +
-	"\bItemUUID\x18\x04 \x01(\tR\bItemUUID\x12\x12\n" +
-	"\x04Unit\x18\x05 \x01(\tR\x04Unit\x12\x1a\n" +
-	"\bQuantity\x18\x06 \x01(\x01R\bQuantity\x12\x18\n" +
-	"\aAvgCost\x18\a \x01(\x01R\aAvgCost\x12\x14\n" +
-	"\x05Value\x18\b \x01(\x01R\x05Value\x12\x1e\n" +
+	"\x04Note\x18\t \x01(\tR\x04Note\"\xb4\x01\n" +
+	"\x18BalanceHistoryReferences\x120\n" +
+	"\x13TransactionLineUUID\x18\x01 \x01(\fR\x13TransactionLineUUID\x12(\n" +
+	"\x0fTransactionUUID\x18\x02 \x01(\fR\x0fTransactionUUID\x12 \n" +
+	"\vAccountUUID\x18\x03 \x01(\fR\vAccountUUID\x12\x1a\n" +
+	"\bItemUUID\x18\x04 \x01(\fR\bItemUUID\"\xad\x03\n" +
+	"\x0eBalanceHistory\x12\x12\n" +
+	"\x04UUID\x18\x01 \x01(\fR\x04UUID\x12\x12\n" +
+	"\x04Path\x18\x02 \x03(\tR\x04Path\x12E\n" +
 	"\n" +
-	"DatetimeMs\x18\t \x01(\x12R\n" +
-	"DatetimeMs\x12\x14\n" +
-	"\x05Price\x18\n" +
-	" \x01(\x01R\x05Price\x12\x1a\n" +
+	"references\x18\x03 \x01(\v2%.inventorypb.BalanceHistoryReferencesR\n" +
+	"references\x12\x12\n" +
+	"\x04Unit\x18\x04 \x01(\fR\x04Unit\x12\x1a\n" +
+	"\bQuantity\x18\x05 \x01(\x01R\bQuantity\x12\x18\n" +
+	"\aAvgCost\x18\x06 \x01(\x01R\aAvgCost\x12\x14\n" +
+	"\x05Value\x18\a \x01(\x01R\x05Value\x12\x1e\n" +
+	"\n" +
+	"DatetimeMs\x18\b \x01(\x12R\n" +
+	"DatetimeMs\x12*\n" +
+	"\x10TransactionPrice\x18\t \x01(\x01R\x10TransactionPrice\x12 \n" +
+	"\vMarketPrice\x18\n" +
+	" \x01(\x01R\vMarketPrice\x12\x1a\n" +
 	"\bCurrency\x18\v \x01(\tR\bCurrency\x12 \n" +
 	"\vMarketValue\x18\f \x01(\x01R\vMarketValue\x12 \n" +
 	"\vDescription\x18\r \x01(\tR\vDescription\"}\n" +
@@ -761,18 +903,17 @@ const file_inventory_proto_rawDesc = "" +
 	"\x04Rate\x18\x03 \x01(\x01R\x04Rate\x12\x1e\n" +
 	"\n" +
 	"DatetimeMs\x18\x04 \x01(\x12R\n" +
-	"DatetimeMs\"\xa0\x01\n" +
-	"\fMarketPrices\x12\x0e\n" +
-	"\x02ID\x18\x01 \x01(\x11R\x02ID\x12\x1a\n" +
-	"\bItemUUID\x18\x02 \x01(\tR\bItemUUID\x12\x1e\n" +
+	"DatetimeMs\"\x90\x01\n" +
+	"\fMarketPrices\x12\x1a\n" +
+	"\bItemUUID\x18\x01 \x01(\fR\bItemUUID\x12\x1e\n" +
 	"\n" +
-	"DatetimeMs\x18\x03 \x01(\x12R\n" +
+	"DatetimeMs\x18\x02 \x01(\x12R\n" +
 	"DatetimeMs\x12\x14\n" +
-	"\x05Price\x18\x04 \x01(\x01R\x05Price\x12\x12\n" +
-	"\x04Unit\x18\x05 \x01(\tR\x04Unit\x12\x1a\n" +
-	"\bCurrency\x18\x06 \x01(\tR\bCurrency\"\x84\x02\n" +
-	"\x06Packet\x12\x0e\n" +
-	"\x02ID\x18\x01 \x01(\x11R\x02ID\x12\x12\n" +
+	"\x05Price\x18\x03 \x01(\x01R\x05Price\x12\x12\n" +
+	"\x04Unit\x18\x04 \x01(\tR\x04Unit\x12\x1a\n" +
+	"\bCurrency\x18\x05 \x01(\tR\bCurrency\"\x88\x02\n" +
+	"\x06Packet\x12\x12\n" +
+	"\x04UUID\x18\x01 \x01(\fR\x04UUID\x12\x12\n" +
 	"\x04Type\x18\x02 \x01(\x11R\x04Type\x121\n" +
 	"\x04Meta\x18\x03 \x03(\v2\x1d.inventorypb.Packet.MetaEntryR\x04Meta\x121\n" +
 	"\x04Body\x18\x04 \x03(\v2\x1d.inventorypb.Packet.BodyEntryR\x04Body\x1a7\n" +
@@ -795,27 +936,33 @@ func file_inventory_proto_rawDescGZIP() []byte {
 	return file_inventory_proto_rawDescData
 }
 
-var file_inventory_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_inventory_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_inventory_proto_goTypes = []any{
-	(*Item)(nil),                // 0: inventorypb.Item
-	(*Transaction)(nil),         // 1: inventorypb.Transaction
-	(*TransactionLine)(nil),     // 2: inventorypb.TransactionLine
-	(*BalanceHistory)(nil),      // 3: inventorypb.BalanceHistory
-	(*UnitConversions)(nil),     // 4: inventorypb.UnitConversions
-	(*CurrencyConversions)(nil), // 5: inventorypb.CurrencyConversions
-	(*MarketPrices)(nil),        // 6: inventorypb.MarketPrices
-	(*Packet)(nil),              // 7: inventorypb.Packet
-	nil,                         // 8: inventorypb.Packet.MetaEntry
-	nil,                         // 9: inventorypb.Packet.BodyEntry
+	(*Account)(nil),                  // 0: inventorypb.Account
+	(*Item)(nil),                     // 1: inventorypb.Item
+	(*Transaction)(nil),              // 2: inventorypb.Transaction
+	(*TransactionLine)(nil),          // 3: inventorypb.TransactionLine
+	(*BalanceHistoryReferences)(nil), // 4: inventorypb.BalanceHistoryReferences
+	(*BalanceHistory)(nil),           // 5: inventorypb.BalanceHistory
+	(*UnitConversions)(nil),          // 6: inventorypb.UnitConversions
+	(*CurrencyConversions)(nil),      // 7: inventorypb.CurrencyConversions
+	(*MarketPrices)(nil),             // 8: inventorypb.MarketPrices
+	(*Packet)(nil),                   // 9: inventorypb.Packet
+	nil,                              // 10: inventorypb.Packet.MetaEntry
+	nil,                              // 11: inventorypb.Packet.BodyEntry
 }
 var file_inventory_proto_depIdxs = []int32{
-	8, // 0: inventorypb.Packet.Meta:type_name -> inventorypb.Packet.MetaEntry
-	9, // 1: inventorypb.Packet.Body:type_name -> inventorypb.Packet.BodyEntry
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	3,  // 0: inventorypb.Account.TransactionLines:type_name -> inventorypb.TransactionLine
+	3,  // 1: inventorypb.Item.TransactionLines:type_name -> inventorypb.TransactionLine
+	3,  // 2: inventorypb.Transaction.TransactionLines:type_name -> inventorypb.TransactionLine
+	4,  // 3: inventorypb.BalanceHistory.references:type_name -> inventorypb.BalanceHistoryReferences
+	10, // 4: inventorypb.Packet.Meta:type_name -> inventorypb.Packet.MetaEntry
+	11, // 5: inventorypb.Packet.Body:type_name -> inventorypb.Packet.BodyEntry
+	6,  // [6:6] is the sub-list for method output_type
+	6,  // [6:6] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_inventory_proto_init() }
@@ -829,7 +976,7 @@ func file_inventory_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_inventory_proto_rawDesc), len(file_inventory_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

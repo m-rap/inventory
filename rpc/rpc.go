@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"hash/crc32"
+
+	"github.com/google/uuid"
 )
 
 var (
@@ -22,7 +24,7 @@ type PacketWrapper struct {
 }
 
 type Packet struct {
-	ID   int
+	UUID uuid.UUID
 	Type int16
 	Meta map[string][]byte
 	Body map[string][]byte

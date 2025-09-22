@@ -10,13 +10,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 )
 
 func OnMarshalItem(item *inventory.Item) ([]byte, error) {
 	// Example encode/decode roundtrip
 	// enc := inventoryrpc.NewEncoder()
-	it := inventorypb.NewItem(item)
+	it := inventorypb.NewItem(item, nil)
 	// Marshal to bytes
 	return proto.Marshal(&it)
 }
@@ -40,14 +41,23 @@ func OnUnmarshalItem(receivedItemBin []byte) (inventory.Item, error) {
 }
 
 func doSend() {
-	it := inventory.Item{UUID: "I1", Name: "Steel", Description: "Raw material", Unit: "kg"}
+	itUUID, err := uuid.NewV6()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	it := inventory.Item{UUID: itUUID, Name: "Steel", Description: "Raw material", Unit: "kg"}
 	itemBin, err := OnMarshalItem(&it)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	pktUUID, err := uuid.NewV6()
+	if err != nil {
+		log.Fatal(err)
+	}
 	pkt := inventoryrpc.Packet{
-		ID:   0,
+		UUID: pktUUID,
 		Type: inventoryrpc.TypeReq,
 		Meta: nil,
 		Body: map[string][]byte{
@@ -125,7 +135,7 @@ func doBind() {
 			fmt.Println("header:")
 			fmt.Printf("  length: %v\n", receivedPktWrapperBins[i].Length)
 			fmt.Printf("  checksum: %v\n", receivedPktWrapperBins[i].Checksum)
-			fmt.Printf("  id: %v\n", receivedPkt.ID)
+			fmt.Printf("  uuid: %v\n", receivedPkt.UUID)
 			fmt.Printf("  type: %v\n", receivedPkt.Type)
 			fmt.Printf("  meta: %v\n", receivedPkt.Meta)
 

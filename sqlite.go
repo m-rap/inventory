@@ -494,60 +494,34 @@ func BuildAccountTree(db *sql.DB) (map[int][]string, map[int]*Account, error) {
 // --- Fetch & Rollup Historical Balances ---
 
 func FetchLeafBalances(db *sql.DB, accountMap map[int]*Account) ([]BalanceHistory, error) {
-	// rows, err := db.Query(`
-	// 	SELECT a.id, COALESCE(i.name,''), COALESCE(i.unit,''),
-	// 	       h.quantity, h.avg_cost, h.quantity*h.avg_cost, t.date
-	// 	FROM balance_history h
-	// 	JOIN (
-	// 	    SELECT item_id, account_id, MAX(t.date) as last_date
-	// 	    FROM balance_history bh
-	// 	    JOIN transactions t ON bh.transaction_id = t.id
-	// 	    GROUP BY item_id, account_id
-	// 	) last ON h.item_id=last.item_id AND h.account_id=last.account_id
-	// 	JOIN transactions t ON h.transaction_id=t.id AND t.date=last.last_date
-	// 	LEFT JOIN items i ON h.item_id=i.id
-	// 	JOIN accounts a ON h.account_id=a.id
-	// `)
-	// rows, err := db.Query(`
-	// 	select * from (
-	// 		select a.id as account_id, a.parent_uuid as parent_uuid, a.name as account,p.name as parent,t.date,t.description,i.id as item_id,i.name as item,l1.quantity as qty,b.quantity as bal,b.total_cost,b.avg_cost,i.unit from balance_history b
-	// 		join accounts a on b.account_id = a.id
-	// 		join transactions t on b.transaction_id = t.id
-	// 		join transaction_lines l1 on l1.transaction_id=b.transaction_id and l1.account_id=b.account_id
-	// 		left join items i on b.item_id = i.id
-	// 		left join accounts p on a.parent_uuid = p.id
-	// 		order by date desc
-	// 	)
-	// 	group by account_id,item_id
-	// `)
 	rows, err := db.Query(`
-		select * from (
-			select
-				a.id as account_id,
-				l1.id as transaction_line_id,
-				i.id as item_id,
-				i.name as item_name,
-				t.id as transaction_id,
-				t.description,
-				l1.price as transaction_price,
-				m.price as market_price,
-				b.quantity,
-				i.unit,
-				b.avg_cost,
-				b.quantity*b.avg_cost,
-				b.quantity*m.price,
-				t.datetime_ms
-			from balance_history b
-			join accounts a on b.account_id = a.id
-			join transactions t on b.transaction_id = t.id
-			join transaction_lines l1 on l1.transaction_id=b.transaction_id and l1.account_id=b.account_id
-			left join items i on b.item_id = i.id
-			left join accounts p on a.parent_id = p.id
-			left join market_prices m on b.item_id = m.item_id
-			order by t.datetime_ms desc
-		) 
-		group by account_id,item_id
-	`)
+select * from (
+	select
+		a.id as account_id,
+		l1.id as transaction_line_id,
+		i.id as item_id,
+		i.name as item_name,
+		t.id as transaction_id,
+		t.description,
+		l1.price as transaction_price,
+		m.price as market_price,
+		b.quantity,
+		i.unit,
+		b.avg_cost,
+		b.quantity*b.avg_cost,
+		b.quantity*m.price,
+		t.datetime_ms
+	from balance_history b
+	join accounts a on b.account_id = a.id
+	join transactions t on b.transaction_id = t.id
+	join transaction_lines l1 on l1.transaction_id=b.transaction_id and l1.account_id=b.account_id
+	left join items i on b.item_id = i.id
+	left join accounts p on a.parent_id = p.id
+	left join (select * from (select * from market_prices order by datetime_ms desc) group by item_id) m on b.item_id = m.item_id
+	order by t.datetime_ms desc
+) 
+group by account_id,item_id;
+`)
 	if err != nil {
 		return nil, err
 	}

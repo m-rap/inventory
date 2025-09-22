@@ -54,6 +54,7 @@ type Transaction struct {
 
 type TransactionLine struct {
 	ID          int
+	UUID        uuid.UUID
 	Transaction *Transaction
 	Account     *Account
 	Item        *Item
@@ -66,6 +67,7 @@ type TransactionLine struct {
 
 type BalanceHistory struct {
 	ID               int
+	UUID             uuid.UUID
 	Path             []string
 	TransactionLine  *TransactionLine
 	Unit             string
