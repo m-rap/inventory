@@ -303,7 +303,7 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 	var res sql.Result
 
 	// fmt.Println("inserting transaction")
-	res, err = tx.Exec("INSERT INTO transactions(uuid,datetime_ms,year,month,description) VALUES(?,?,?,?,?)", trUUID, date.UnixMilli(), date.Year(), int(date.Month()), desc)
+	res, err = tx.Exec("INSERT INTO transactions(uuid,datetime_ms,year,month,description) VALUES(?,?,?,?,?)", trUUID[:], date.UnixMilli(), date.Year(), int(date.Month()), desc)
 
 	if err != nil {
 		tx.Rollback()
@@ -332,7 +332,7 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 		// fmt.Println(lineUUID, trID, l.Account.ID, sql.NullInt64{Int64: int64(itemID), Valid: itemID != -1}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
 		_, err = tx.Exec(
 			"INSERT INTO transaction_lines(uuid,transaction_id,account_id,item_id,quantity,unit,price,currency,note) VALUES(?,?,?,?,?,?,?,?,?)",
-			lineUUID, trID, l.Account.ID, sql.NullInt64{Int64: int64(itemID), Valid: itemID != -1}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
+			lineUUID[:], trID, l.Account.ID, sql.NullInt64{Int64: int64(itemID), Valid: itemID != -1}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -372,7 +372,7 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 
 		_, err = tx.Exec(`INSERT INTO balance_history(uuid,item_id,account_id,transaction_id,quantity,total_cost,avg_cost)
 		                  VALUES(?,?,?,?,?,?,?)`,
-			histUUID, itemID, l.Account.ID, trID, newQty, newTotal, avgCost)
+			histUUID[:], itemID, l.Account.ID, trID, newQty, newTotal, avgCost)
 		if err != nil {
 			tx.Rollback()
 			return err
