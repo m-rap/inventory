@@ -65,21 +65,21 @@ type TransactionLine struct {
 }
 
 type BalanceHistory struct {
-	ID          int
-	Path        []string
-	Account     *Account
-	Item        *Item
-	Unit        string
-	Quantity    float64
-	AvgCost     float64
-	Value       float64
-	DatetimeMs  int64
-	Year        int
-	Month       uint8
-	Price       float64
-	Currency    string
-	MarketValue float64
-	Description string
+	ID               int
+	Path             []string
+	TransactionLine  *TransactionLine
+	Unit             string
+	Quantity         float64
+	AvgCost          float64
+	Value            float64
+	DatetimeMs       int64
+	Year             int
+	Month            uint8
+	TransactionPrice float64
+	MarketPrice      float64
+	Currency         string
+	MarketValue      float64
+	Description      string
 }
 
 type UnitConversions struct {
@@ -109,10 +109,10 @@ func RollupBalances(balances []BalanceHistory, paths map[int][]string) map[strin
 	// fmt.Println("enter rollup balances")
 	result := map[string]BalanceHistory{}
 	for _, b := range balances {
-		path := paths[b.Account.ID]
+		path := paths[b.TransactionLine.Account.ID]
 		var itemName string
-		if b.Item != nil {
-			itemName = b.Item.Name
+		if b.TransactionLine.Item != nil {
+			itemName = b.TransactionLine.Item.Name
 		} else {
 			itemName = ""
 		}
@@ -123,7 +123,7 @@ func RollupBalances(balances []BalanceHistory, paths map[int][]string) map[strin
 			agg.Quantity += b.Quantity
 			agg.Value += b.Value
 			agg.DatetimeMs = b.DatetimeMs
-			agg.Account = b.Account
+			agg.TransactionLine = b.TransactionLine
 			result[key] = agg
 		}
 	}
@@ -155,10 +155,10 @@ func PrintBalances(db *sql.DB) error {
 		k := keys[i]
 		b := rolled[k]
 		var normQty, normVal float64
-		if b.Account != nil &&
-			(b.Account.IsChildOfOrItself(LiabilityAcc) ||
-				b.Account.IsChildOfOrItself(EquityAcc) ||
-				b.Account.IsChildOfOrItself(IncomeAcc)) {
+		if b.TransactionLine.Account != nil &&
+			(b.TransactionLine.Account.IsChildOfOrItself(LiabilityAcc) ||
+				b.TransactionLine.Account.IsChildOfOrItself(EquityAcc) ||
+				b.TransactionLine.Account.IsChildOfOrItself(IncomeAcc)) {
 			normQty = -b.Quantity
 			normVal = -b.Value
 		} else {
@@ -173,7 +173,7 @@ func PrintBalances(db *sql.DB) error {
 func RollupMarketBalances(balances []BalanceHistory, paths map[int][]string) map[string]BalanceHistory {
 	result := map[string]BalanceHistory{}
 	for _, b := range balances {
-		path := paths[b.Account.ID]
+		path := paths[b.TransactionLine.Account.ID]
 		itemName := ""
 		for i := 1; i <= len(path); i++ {
 			key := strings.Join(path[:i], " > ") + itemName
@@ -182,7 +182,7 @@ func RollupMarketBalances(balances []BalanceHistory, paths map[int][]string) map
 			agg.Quantity += b.Quantity
 			agg.MarketValue += b.MarketValue
 			agg.Currency = b.Currency
-			agg.Price = b.Price
+			agg.TransactionPrice = b.TransactionPrice
 			result[key] = agg
 		}
 	}

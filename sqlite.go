@@ -502,21 +502,27 @@ func FetchLeafBalances(db *sql.DB, accountMap map[int]*Account) ([]BalanceHistor
 		select * from (
 			select
 				a.id as account_id,
+				l1.id as transaction_line_id,
 				i.id as item_id,
 				i.name as item_name,
-				i.unit,
+				t.id as transaction_id,
+				t.description,
+				l1.price as transaction_price,
+				m.price as market_price,
 				b.quantity,
+				i.unit,
 				b.avg_cost,
 				b.quantity*b.avg_cost,
-				t.datetime_ms,
-				t.description
+				b.quantity*m.price,
+				t.datetime_ms
 			from balance_history b
 			join accounts a on b.account_id = a.id
 			join transactions t on b.transaction_id = t.id
 			join transaction_lines l1 on l1.transaction_id=b.transaction_id and l1.account_id=b.account_id
 			left join items i on b.item_id = i.id
 			left join accounts p on a.parent_id = p.id
-			order by datetime_ms desc
+			left join market_prices m on b.item_id = m.item_id
+			order by t.datetime_ms desc
 		) 
 		group by account_id,item_id
 	`)
@@ -529,11 +535,12 @@ func FetchLeafBalances(db *sql.DB, accountMap map[int]*Account) ([]BalanceHistor
 	for rows.Next() {
 		var itemName, unit sql.NullString
 		var desc string
-		var accID int
+		var accID, lineID, trID int
 		var itemID sql.NullInt64
 		var date int64
-		var qty, avgCost, value float64
-		if err := rows.Scan(&accID, &itemID, &itemName, &unit, &qty, &avgCost, &value, &date, &desc); err != nil {
+		var trPrice, qty, avgCost, value float64
+		var marketPrice, marketValue sql.NullFloat64
+		if err := rows.Scan(&accID, &lineID, &itemID, &itemName, &trID, &desc, &trPrice, &marketPrice, &qty, &unit, &avgCost, &value, &marketValue, &date); err != nil {
 			return nil, err
 		}
 		acc, ok := accountMap[accID]
@@ -542,16 +549,34 @@ func FetchLeafBalances(db *sql.DB, accountMap map[int]*Account) ([]BalanceHistor
 			fmt.Printf("uuid %v not found on map\n", accID)
 		}
 		h := BalanceHistory{
-			Account:     acc,
-			Item:        new(Item),
-			Unit:        unit.String,
-			Quantity:    qty,
-			AvgCost:     avgCost,
-			Value:       value,
-			DatetimeMs:  date,
-			Description: desc,
+			TransactionLine: &TransactionLine{
+				Account: acc,
+				Transaction: &Transaction{
+					ID:          trID,
+					Description: desc,
+					DatetimeMs:  date,
+				},
+			},
+			Unit:             unit.String,
+			TransactionPrice: trPrice,
+			Quantity:         qty,
+			AvgCost:          avgCost,
+			Value:            value,
+			DatetimeMs:       date,
+			Description:      desc,
 		}
-		h.Item.Name = itemName.String
+		if itemID.Valid {
+			h.TransactionLine.Item = &Item{
+				ID:   int(itemID.Int64),
+				Name: itemName.String,
+			}
+		}
+		if marketPrice.Valid {
+			h.MarketPrice = marketPrice.Float64
+		}
+		if marketValue.Valid {
+			h.MarketValue = marketValue.Float64
+		}
 		balances = append(balances, h)
 	}
 	return balances, nil
@@ -599,13 +624,13 @@ func FetchLeafMarketBalances(db *sql.DB) ([]BalanceHistory, error) {
 			return nil, err
 		}
 		h := BalanceHistory{
-			Account:     new(Account),
-			Item:        new(Item),
-			Unit:        unit,
-			Quantity:    qty,
-			Price:       price,
-			Currency:    currency,
-			MarketValue: marketValue,
+			// Account:     new(Account),
+			// Item:        new(Item),
+			Unit:             unit,
+			Quantity:         qty,
+			TransactionPrice: price,
+			Currency:         currency,
+			MarketValue:      marketValue,
 		}
 		// h.Account.UUID, err = uuid.Parse(accID)
 		// if err != nil {
@@ -615,8 +640,8 @@ func FetchLeafMarketBalances(db *sql.DB) ([]BalanceHistory, error) {
 		// if err != nil {
 		// 	return nil, err
 		// }
-		h.Account.ID = accID
-		h.Item.Name = item
+		// h.Account.ID = accID
+		// h.Item.Name = item
 
 		balances = append(balances, h)
 	}
