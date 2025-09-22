@@ -33,7 +33,7 @@ func createAccountsAndItems(db *sql.DB) error {
 	}
 	nonFinancialIncomeAcc, _ = inventory.GetAccountFromUUID(db, sUuid)
 
-	sUuid, err = inventory.AddAccount(db, "incoming material", nil)
+	sUuid, err = inventory.AddAccount(db, "incoming material", nonFinancialIncomeAcc.UUID[:])
 	if err != nil {
 		return err
 	}
@@ -138,8 +138,8 @@ func main() {
 	fmt.Println("apply transactions")
 	// Transaction: Owner invests 1000 USD equity → Cash
 	err = inventory.ApplyTransaction(db, "Owner Investment", time.Date(2025, 9, 1, 0, 0, 0, 0, time.Local), []inventory.TransactionLine{
-		{Account: cashAcc, Item: nil, Quantity: 1000, Unit: "USD", Price: 1, Currency: "USD"},              // Cash
-		{Account: inventory.EquityAcc, Item: nil, Quantity: -1000, Unit: "USD", Price: 1, Currency: "USD"}, // Equity
+		inventory.CreateFinancialTrLine(inventory.EquityAcc, 0, 1000, "USD"), // suntik modal
+		inventory.CreateFinancialTrLine(cashAcc, 1000, 0, "USD"),             // masuk cash
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -151,45 +151,53 @@ func main() {
 	steelNeeded := widgetSteelNeed * targetWidgetProduction
 
 	err = inventory.ApplyTransaction(db, "Purchase Steel 100kg", time.Date(2025, 9, 2, 0, 0, 0, 0, time.Local), []inventory.TransactionLine{
-		{Account: incomingMatAcc, Item: steelItem, Quantity: -100, Unit: "kg", Price: steelPrice, Currency: ""}, // incoming material
-		{Account: rawMaterialAcc, Item: steelItem, Quantity: 100, Unit: "kg", Price: steelPrice, Currency: ""},  // added to Raw Materials inventory
-		{Account: cashAcc, Item: nil, Quantity: -500, Unit: "USD", Price: 1, Currency: "USD"},                   // Cash decreases
-		{Account: matPurchaseAcc, Item: nil, Quantity: 500, Unit: "USD", Price: 1, Currency: "USD"},             // Expense recognized
+		inventory.CreateInventoryTrLine(incomingMatAcc, steelItem, -100, "kg", steelPrice, "USD"), // incoming material
+		inventory.CreateInventoryTrLine(rawMaterialAcc, steelItem, 100, "kg", steelPrice, "USD"),  // added to raw material inventory
+		inventory.CreateFinancialTrLine(cashAcc, 0, 500, "USD"),                                   // Cash decreases
+		inventory.CreateFinancialTrLine(matPurchaseAcc, 500, 0, "USD"),                            // Expense recognized
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	woodPrice := 3.0
 	err = inventory.ApplyTransaction(db, "Purchase Wood 100kg", time.Date(2025, 9, 3, 0, 0, 0, 0, time.Local), []inventory.TransactionLine{
-		{Account: incomingMatAcc, Item: woodItem, Quantity: -150, Unit: "kg", Price: steelPrice, Currency: ""}, // incoming material
-		{Account: rawMaterialAcc, Item: woodItem, Quantity: 150, Unit: "kg", Price: steelPrice, Currency: ""},  // added to Raw Materials inventory
-		{Account: cashAcc, Item: nil, Quantity: -300, Unit: "USD", Price: 1, Currency: "USD"},                  // Cash decreases
-		{Account: matPurchaseAcc, Item: nil, Quantity: 300, Unit: "USD", Price: 1, Currency: "USD"},            // Expense recognized
+		inventory.CreateInventoryTrLine(incomingMatAcc, woodItem, -150, "kg", woodPrice, "USD"), // incoming material
+		inventory.CreateInventoryTrLine(rawMaterialAcc, woodItem, 150, "kg", woodPrice, "USD"),  // added to raw material inventory
+		inventory.CreateFinancialTrLine(cashAcc, 0, 300, "USD"),                                 // Cash decreases
+		inventory.CreateFinancialTrLine(matPurchaseAcc, 300, 0, "USD"),                          // Expense recognized
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	err = inventory.ApplyTransaction(db, "Use Steel to Manufacture Widgets", time.Date(2025, 9, 4, 0, 0, 0, 0, time.Local), []inventory.TransactionLine{
-		{Account: rawMaterialAcc, Item: steelItem, Quantity: -steelNeeded, Unit: "kg", Price: 0, Currency: ""},   // Raw Materials decreases
-		{Account: workInProgressAcc, Item: steelItem, Quantity: steelNeeded, Unit: "kg", Price: 0, Currency: ""}, // WIP increases
+		inventory.CreateInventoryTrLine(rawMaterialAcc, steelItem, -steelNeeded, "kg", steelPrice, "USD"),   // raw material decreases
+		inventory.CreateInventoryTrLine(workInProgressAcc, steelItem, steelNeeded, "kg", steelPrice, "USD"), // wip increases
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// widgetCost := steelNeeded * steelPrice / targetWidgetProduction // 100kg steel makes 50 widgets at 5 USD/kg
+	widgetCost := steelNeeded * steelPrice / targetWidgetProduction // 100kg steel makes 50 widgets at 5 USD/kg
 	err = inventory.ApplyTransaction(db, "Complete Widgets", time.Date(2025, 9, 5, 0, 0, 0, 0, time.Local), []inventory.TransactionLine{
-		{Account: workInProgressAcc, Item: steelItem, Quantity: -steelNeeded, Unit: "kg", Price: 0, Currency: ""},               // WIP decreases
-		{Account: finishedProductAcc, Item: widget1Item, Quantity: targetWidgetProduction, Unit: "pcs", Price: 0, Currency: ""}, // Finished Goods increases
+		inventory.CreateInventoryTrLine(workInProgressAcc, steelItem, -steelNeeded, "kg", steelPrice, "USD"),            // wip decreases
+		inventory.CreateInventoryTrLine(finishedProductAcc, steelItem, targetWidgetProduction, "kg", widgetCost, "USD"), // Finished Goods increases
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Println("update market price")
+
 	// Market prices
-	err = inventory.SetMarketPrice(db, steelItem.UUID[:], 5, "USD", "kg") // steel now 8 USD/kg
+	err = inventory.UpdateMarketPrice(db, steelItem.UUID[:], 6, "USD", "kg") // steel now 6 USD/kg
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Market prices
+	err = inventory.UpdateMarketPrice(db, steelItem.UUID[:], 6, "USD", "kg") // steel now 6 USD/kg
 	if err != nil {
 		log.Fatal(err)
 	}

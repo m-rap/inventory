@@ -266,6 +266,28 @@ func AddItem(db *sql.DB, name, unit, description string) ([]byte, error) {
 	return itUUID[:], err
 }
 
+func CreateInventoryTrLine(acc *Account, item *Item, qty float64, unit string, price float64, currency string) TransactionLine {
+	return TransactionLine{
+		Account:  acc,
+		Item:     item,
+		Quantity: qty,
+		Unit:     unit,
+		Price:    price,
+		Currency: currency,
+	}
+}
+
+func CreateFinancialTrLine(acc *Account, debet float64, kredit float64, currency string) TransactionLine {
+	amount := debet - kredit
+	return TransactionLine{
+		Account:  acc,
+		Item:     nil,
+		Quantity: amount,
+		Unit:     "",
+		Currency: currency,
+	}
+}
+
 func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []TransactionLine) error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -362,7 +384,7 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 	return nil
 }
 
-func SetMarketPrice(db *sql.DB, itemUUID []byte, price float64, currency string, unit string) error {
+func UpdateMarketPrice(db *sql.DB, itemUUID []byte, price float64, currency string, unit string) error {
 	item, err := GetItemFromUUID(db, itemUUID)
 	if err != nil {
 		return err
