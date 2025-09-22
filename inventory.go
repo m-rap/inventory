@@ -122,8 +122,11 @@ func RollupBalances(balances []BalanceHistory, paths map[int][]string) map[strin
 			agg.Path = path[:i]
 			agg.Quantity += b.Quantity
 			agg.Value += b.Value
+			agg.MarketValue += b.MarketValue
+			agg.Currency = b.Currency
 			agg.DatetimeMs = b.DatetimeMs
 			agg.TransactionLine = b.TransactionLine
+			agg.TransactionPrice = b.TransactionPrice
 			result[key] = agg
 		}
 	}
@@ -170,35 +173,19 @@ func PrintBalances(db *sql.DB) error {
 	return nil
 }
 
-func RollupMarketBalances(balances []BalanceHistory, paths map[int][]string) map[string]BalanceHistory {
-	result := map[string]BalanceHistory{}
-	for _, b := range balances {
-		path := paths[b.TransactionLine.Account.ID]
-		itemName := ""
-		for i := 1; i <= len(path); i++ {
-			key := strings.Join(path[:i], " > ") + itemName
-			agg := result[key]
-			agg.Path = path[:i]
-			agg.Quantity += b.Quantity
-			agg.MarketValue += b.MarketValue
-			agg.Currency = b.Currency
-			agg.TransactionPrice = b.TransactionPrice
-			result[key] = agg
-		}
-	}
-	return result
-}
-
 func PrintMarketBalances(db *sql.DB) error {
-	leaf, err := FetchLeafMarketBalances(db)
+	// fmt.Println("building account tree")
+	paths, accMap, err := BuildAccountTree(db)
 	if err != nil {
 		return err
 	}
-	paths, _, err := BuildAccountTree(db)
+	// fmt.Println("fetching leaf balances")
+	leaf, err := FetchLeafBalances(db, accMap)
 	if err != nil {
 		return err
 	}
-	rolled := RollupMarketBalances(leaf, paths)
+	// fmt.Println("rolling up balances")
+	rolled := RollupBalances(leaf, paths)
 
 	fmt.Println("\n=== Market Value Balances ===")
 	for k, b := range rolled {

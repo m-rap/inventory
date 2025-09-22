@@ -208,9 +208,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// fmt.Println("\n=== Market Value Balances (Leaf Accounts) ===")
-	// err = inventory.PrintMarketBalances(db)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	fmt.Println("\n=== Market Value Balances (Leaf Accounts) ===")
+	err = inventory.PrintMarketBalances(db)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
