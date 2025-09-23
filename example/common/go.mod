@@ -17,9 +17,9 @@ require (
 	github.com/vmihailenco/msgpack v4.0.4+incompatible
 	google.golang.org/protobuf v1.36.9
 	inventory v0.0.0-00010101000000-000000000000
+	inventorymsgpack v0.0.0-00010101000000-000000000000
 	inventorypb v0.0.0-00010101000000-000000000000
 	inventoryrpc v0.0.0-00010101000000-000000000000
-	inventorymsgpack v0.0.0-00010101000000-000000000000
 )
 
 require (
