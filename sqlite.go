@@ -108,23 +108,23 @@ CREATE INDEX IF NOT EXISTS idx_market_prices_item_date
 		return err
 	}
 
-	_, err = AddAccount(db, "asset", nil)
+	_, err = AddAccount(db, &Account{Name: "asset"})
 	if err != nil {
 		return err
 	}
-	_, err = AddAccount(db, "equity", nil)
+	_, err = AddAccount(db, &Account{Name: "equity"})
 	if err != nil {
 		return err
 	}
-	_, err = AddAccount(db, "liability", nil)
+	_, err = AddAccount(db, &Account{Name: "liability"})
 	if err != nil {
 		return err
 	}
-	_, err = AddAccount(db, "income", nil)
+	_, err = AddAccount(db, &Account{Name: "income"})
 	if err != nil {
 		return err
 	}
-	_, err = AddAccount(db, "expense", nil)
+	_, err = AddAccount(db, &Account{Name: "expense"})
 	if err != nil {
 		return err
 	}
@@ -133,7 +133,7 @@ CREATE INDEX IF NOT EXISTS idx_market_prices_item_date
 	return err
 }
 
-func GetAccountFromUUID(db *sql.DB, accUUID []byte) (*Account, error) {
+func GetAccountByUUID(db *sql.DB, accUUID []byte) (*Account, error) {
 	rows, err := db.Query(`SELECT * FROM accounts WHERE uuid=?`, accUUID)
 	if err != nil {
 		return nil, err
@@ -160,7 +160,7 @@ func GetAccountFromUUID(db *sql.DB, accUUID []byte) (*Account, error) {
 	}, nil
 }
 
-func GetAccountFromID(db *sql.DB, accID int) (*Account, error) {
+func GetAccountByID(db *sql.DB, accID int) (*Account, error) {
 	rows, err := db.Query(`SELECT * FROM accounts WHERE id=?`, accID)
 	if err != nil {
 		return nil, err
@@ -201,33 +201,35 @@ func GetAccountFromID(db *sql.DB, accID int) (*Account, error) {
 // 	return int(id), nil
 // }
 
-func AddAccount(db *sql.DB, name string, parentUUID []byte) ([]byte, error) {
+func AddAccount(db *sql.DB, acc *Account) ([]byte, error) {
 	accUUID, err := uuid.NewV6()
 	if err != nil {
 		return accUUID[:], err
 	}
 
 	var parentID int
-	acc, err := GetAccountFromUUID(db, parentUUID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			parentID = -1
+	if acc.Parent != nil {
+		parentAcc, err := GetAccountByUUID(db, acc.Parent.UUID[:])
+		if err != nil {
+			if err == sql.ErrNoRows {
+				parentID = -1
+			} else {
+				return accUUID[:], err
+			}
+		}
+		if parentAcc != nil {
+			parentID = parentAcc.ID
 		} else {
-			return accUUID[:], err
+			parentID = -1
 		}
 	}
-	if acc != nil {
-		parentID = acc.ID
-	} else {
-		parentID = -1
-	}
 
-	_, err = db.Exec("INSERT INTO accounts(uuid,name,parent_id) VALUES(?,?,?)", accUUID[:], name, parentID)
+	_, err = db.Exec("INSERT INTO accounts(uuid,name,parent_id) VALUES(?,?,?)", accUUID[:], acc.Name, parentID)
 
 	return accUUID[:], err
 }
 
-func GetItemFromUUID(db *sql.DB, itUUID []byte) (*Item, error) {
+func GetItemByUUID(db *sql.DB, itUUID []byte) (*Item, error) {
 	rows, err := db.Query(`SELECT * FROM items WHERE uuid=?`, itUUID)
 	if err != nil {
 		return nil, err
@@ -256,18 +258,18 @@ func GetItemFromUUID(db *sql.DB, itUUID []byte) (*Item, error) {
 	}, nil
 }
 
-func AddItem(db *sql.DB, name, unit, description string) ([]byte, error) {
+func AddItem(db *sql.DB, item *Item) ([]byte, error) {
 	itUUID, err := uuid.NewV6()
 	if err != nil {
 		return itUUID[:], err
 	}
 
-	_, err = db.Exec("INSERT INTO items(uuid,name,unit,description) VALUES(?,?,?,?)", itUUID[:], name, unit, description)
+	_, err = db.Exec("INSERT INTO items(uuid,name,unit,description) VALUES(?,?,?,?)", itUUID[:], item.Name, item.Unit, item.Description)
 	return itUUID[:], err
 }
 
-func CreateInventoryTrLine(acc *Account, item *Item, qty float64, unit string, price float64, currency string) TransactionLine {
-	return TransactionLine{
+func CreateInventoryTrLine(acc *Account, item *Item, qty float64, unit string, price float64, currency string) *TransactionLine {
+	return &TransactionLine{
 		Account:  acc,
 		Item:     item,
 		Quantity: qty,
@@ -277,9 +279,9 @@ func CreateInventoryTrLine(acc *Account, item *Item, qty float64, unit string, p
 	}
 }
 
-func CreateFinancialTrLine(acc *Account, debet float64, kredit float64, currency string) TransactionLine {
+func CreateFinancialTrLine(acc *Account, debet float64, kredit float64, currency string) *TransactionLine {
 	amount := debet - kredit
-	return TransactionLine{
+	return &TransactionLine{
 		Account:  acc,
 		Item:     nil,
 		Quantity: amount,
@@ -288,7 +290,7 @@ func CreateFinancialTrLine(acc *Account, debet float64, kredit float64, currency
 	}
 }
 
-func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []TransactionLine) error {
+func ApplyTransaction(db *sql.DB, transaction *Transaction) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -301,9 +303,10 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 	}
 
 	var res sql.Result
+	date := time.UnixMilli(transaction.DatetimeMs)
 
 	// fmt.Println("inserting transaction")
-	res, err = tx.Exec("INSERT INTO transactions(uuid,datetime_ms,year,month,description) VALUES(?,?,?,?,?)", trUUID[:], date.UnixMilli(), date.Year(), int(date.Month()), desc)
+	res, err = tx.Exec("INSERT INTO transactions (uuid,datetime_ms,year,month,description) VALUES(?,?,?,?,?)", trUUID[:], transaction.DatetimeMs, date.Year(), int(date.Month()), transaction.Description)
 
 	if err != nil {
 		tx.Rollback()
@@ -316,7 +319,7 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 		return err
 	}
 
-	for _, l := range lines {
+	for _, l := range transaction.Lines {
 		// fmt.Println("inserting line")
 		lineUUID, err := uuid.NewV6()
 		if err != nil {
@@ -331,7 +334,7 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 		}
 		// fmt.Println(lineUUID, trID, l.Account.ID, sql.NullInt64{Int64: int64(itemID), Valid: itemID != -1}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
 		_, err = tx.Exec(
-			"INSERT INTO transaction_lines(uuid,transaction_id,account_id,item_id,quantity,unit,price,currency,note) VALUES(?,?,?,?,?,?,?,?,?)",
+			"INSERT INTO transaction_lines (uuid,transaction_id,account_id,item_id,quantity,unit,price,currency,note) VALUES(?,?,?,?,?,?,?,?,?)",
 			lineUUID[:], trID, l.Account.ID, sql.NullInt64{Int64: int64(itemID), Valid: itemID != -1}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
 		if err != nil {
 			tx.Rollback()
@@ -384,8 +387,8 @@ func ApplyTransaction(db *sql.DB, desc string, date time.Time, lines []Transacti
 	return nil
 }
 
-func UpdateMarketPrice(db *sql.DB, itemUUID []byte, price float64, currency string, unit string) error {
-	item, err := GetItemFromUUID(db, itemUUID)
+func UpdateMarketPrice(db *sql.DB, marketPrice *MarketPrices) error {
+	item, err := GetItemByUUID(db, marketPrice.Item.UUID[:])
 	if err != nil {
 		return err
 	}
@@ -393,7 +396,7 @@ func UpdateMarketPrice(db *sql.DB, itemUUID []byte, price float64, currency stri
 	_, err = db.Exec(`
 		INSERT INTO market_prices(item_id,datetime_ms,price,currency,unit)
 		VALUES(?,?,?,?,?)
-	`, item.ID, time.Now().UnixMilli(), price, currency, unit)
+	`, item.ID, marketPrice.DatetimeMs, marketPrice.Price, marketPrice.Currency, marketPrice.Unit)
 
 	return err
 }

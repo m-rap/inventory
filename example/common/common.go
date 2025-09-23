@@ -64,7 +64,7 @@ func (e *ExampleProtobuf) OnMarshalPkt(pkt *inventoryrpc.Packet) ([]byte, error)
 	return proto.Marshal(&pbPkt)
 }
 
-func (e *ExampleProtobuf) OnUnmarshalPkt(receivedPktBin []byte) (inventoryrpc.Packet, error) {
+func (e *ExampleProtobuf) OnUnmarshalPkt(receivedPktBin []byte) (*inventoryrpc.Packet, error) {
 	var receivedPkt inventorypb.Packet
 	err := proto.Unmarshal(receivedPktBin, &receivedPkt)
 
@@ -98,7 +98,7 @@ func CreatePacketToSend(e ExampleInterface) []byte {
 		Type: inventoryrpc.TypeReq,
 		Meta: nil,
 		Body: map[string][]byte{
-			"function": []byte("InsertItem"),
+			"function": []byte("AddItem"),
 			"item":     itemBin,
 		},
 	}

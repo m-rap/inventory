@@ -16,9 +16,9 @@ func NewPacket(pkt *inventoryrpc.Packet) Packet {
 	}
 }
 
-func ToInvPacket(pkt *Packet) inventoryrpc.Packet {
+func ToInvPacket(pkt *Packet) *inventoryrpc.Packet {
 	pktUUID, _ := uuid.FromBytes(pkt.UUID)
-	return inventoryrpc.Packet{
+	return &inventoryrpc.Packet{
 		UUID: pktUUID,
 		Type: int16(pkt.Type),
 		Meta: pkt.Meta,
