@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 )
 
-func NewPacket(pkt *inventoryrpc.Packet) Packet {
-	return Packet{
+func NewPacket(pkt *inventoryrpc.Packet) *Packet {
+	return &Packet{
 		UUID: pkt.UUID[:],
 		Type: int32(pkt.Type),
 		Meta: pkt.Meta,
@@ -27,7 +27,7 @@ func ToInvPacket(pkt *Packet) *inventoryrpc.Packet {
 }
 
 func NewTransactionLine(transactionLine inventory.TransactionLine) *TransactionLine {
-	trLine := TransactionLine{
+	trLine := &TransactionLine{
 		UUID:     transactionLine.UUID[:],
 		Quantity: transactionLine.Quantity,
 		Unit:     transactionLine.Unit,
@@ -44,15 +44,15 @@ func NewTransactionLine(transactionLine inventory.TransactionLine) *TransactionL
 	if transactionLine.Item != nil {
 		trLine.ItemUUID = transactionLine.Item.UUID[:]
 	}
-	return &trLine
+	return trLine
 }
 
-func NewItem(item *inventory.Item, transactionLines []inventory.TransactionLine) Item {
+func NewItem(item *inventory.Item, transactionLines []inventory.TransactionLine) *Item {
 	var lines []*TransactionLine
 	for i := range transactionLines {
 		lines = append(lines, NewTransactionLine(transactionLines[i]))
 	}
-	return Item{
+	return &Item{
 		UUID:             item.UUID[:],
 		Name:             item.Name,
 		Description:      item.Description,
@@ -61,9 +61,9 @@ func NewItem(item *inventory.Item, transactionLines []inventory.TransactionLine)
 	}
 }
 
-func ToInvItem(item *Item) inventory.Item {
+func ToInvItem(item *Item) *inventory.Item {
 	itemUUID, _ := uuid.FromBytes(item.UUID)
-	return inventory.Item{
+	return &inventory.Item{
 		UUID:        itemUUID,
 		Name:        item.Name,
 		Description: item.Description,

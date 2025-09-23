@@ -17,8 +17,8 @@ import (
 type ExampleInterface interface {
 	OnMarshalItem(item *inventory.Item) ([]byte, error)
 	OnMarshalPkt(pkt *inventoryrpc.Packet) ([]byte, error)
-	OnUnmarshalPkt(receivedPktBin []byte) (inventoryrpc.Packet, error)
-	OnUnmarshalItem(receivedItemBin []byte) (inventory.Item, error)
+	OnUnmarshalPkt(receivedPktBin []byte) (*inventoryrpc.Packet, error)
+	OnUnmarshalItem(receivedItemBin []byte) (*inventory.Item, error)
 }
 
 type ExampleMsgpack struct{}
@@ -36,14 +36,14 @@ func (e *ExampleMsgpack) OnMarshalPkt(pkt *inventoryrpc.Packet) ([]byte, error) 
 	return msgpack.Marshal(&msgpackPkt)
 }
 
-func (e *ExampleMsgpack) OnUnmarshalPkt(receivedPktBin []byte) (inventoryrpc.Packet, error) {
+func (e *ExampleMsgpack) OnUnmarshalPkt(receivedPktBin []byte) (*inventoryrpc.Packet, error) {
 	var receivedPkt inventorymsgpack.Packet
 	err := msgpack.Unmarshal(receivedPktBin, &receivedPkt)
 
 	return inventorymsgpack.ToInvPacket(&receivedPkt), err
 }
 
-func (e *ExampleMsgpack) OnUnmarshalItem(receivedItemBin []byte) (inventory.Item, error) {
+func (e *ExampleMsgpack) OnUnmarshalItem(receivedItemBin []byte) (*inventory.Item, error) {
 	var receivedItem inventorymsgpack.Item
 	err := msgpack.Unmarshal(receivedItemBin, &receivedItem)
 	return inventorymsgpack.ToInvItem(&receivedItem), err
@@ -56,12 +56,12 @@ func (e *ExampleProtobuf) OnMarshalItem(item *inventory.Item) ([]byte, error) {
 	// enc := inventoryrpc.NewEncoder()
 	it := inventorypb.NewItem(item, nil)
 	// Marshal to bytes
-	return proto.Marshal(&it)
+	return proto.Marshal(it)
 }
 
 func (e *ExampleProtobuf) OnMarshalPkt(pkt *inventoryrpc.Packet) ([]byte, error) {
 	pbPkt := inventorypb.NewPacket(pkt)
-	return proto.Marshal(&pbPkt)
+	return proto.Marshal(pbPkt)
 }
 
 func (e *ExampleProtobuf) OnUnmarshalPkt(receivedPktBin []byte) (*inventoryrpc.Packet, error) {
@@ -71,7 +71,7 @@ func (e *ExampleProtobuf) OnUnmarshalPkt(receivedPktBin []byte) (*inventoryrpc.P
 	return inventorypb.ToInvPacket(&receivedPkt), err
 }
 
-func (e *ExampleProtobuf) OnUnmarshalItem(receivedItemBin []byte) (inventory.Item, error) {
+func (e *ExampleProtobuf) OnUnmarshalItem(receivedItemBin []byte) (*inventory.Item, error) {
 	var receivedItem inventorypb.Item
 	err := proto.Unmarshal(receivedItemBin, &receivedItem)
 	return inventorypb.ToInvItem(&receivedItem), err

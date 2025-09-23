@@ -69,7 +69,7 @@ func (p *Processor) Process() error {
 				return err
 			}
 			invItem := ToInvItem(&item)
-			inventory.AddItem(p.Db, &invItem)
+			inventory.AddItem(p.Db, invItem)
 		}
 	}
 	return nil
