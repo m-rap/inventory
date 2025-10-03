@@ -1,10 +1,11 @@
 package inventorypb
 
 import (
-	"database/sql"
+	"fmt"
 	"inventory"
 	"inventoryrpc"
 	"log"
+	"os"
 	"sync"
 
 	"github.com/google/uuid"
@@ -16,7 +17,6 @@ type Processor struct {
 	PktBeingProcessed map[uuid.UUID]*inventoryrpc.Packet
 	Mutex             sync.Mutex
 	ProcessingChan    chan *inventoryrpc.Packet
-	Db                *sql.DB
 }
 
 func NewProcessor() *Processor {
@@ -58,6 +58,28 @@ func (p *Processor) Process() error {
 		}
 		funcStr := string(funcBytes)
 		switch funcStr {
+		case "OpenOrCreateDB":
+			dbUUIDBytes, ok := pkt.Body["dbUUID"]
+			if !ok {
+				break
+			}
+			dbUUID, err := uuid.FromBytes(dbUUIDBytes)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error converting bytes to uuid: %s\n", err.Error())
+				break
+			}
+			inventory.OpenOrCreateDB(dbUUID)
+		case "SelectDB":
+			dbUUIDBytes, ok := pkt.Body["DbUUID"]
+			if !ok {
+				break
+			}
+			dbUUID, err := uuid.FromBytes(dbUUIDBytes)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error converting bytes to uuid: %s\n", err.Error())
+				break
+			}
+			inventory.SelectDB(dbUUID)
 		case "AddItem":
 			itemBytes, ok := pkt.Body["Item"]
 			if !ok {
@@ -69,7 +91,31 @@ func (p *Processor) Process() error {
 				return err
 			}
 			invItem := ToInvItem(&item)
-			inventory.AddItem(p.Db, invItem)
+			inventory.AddItem(inventory.CurrDB, invItem)
+		case "AddAccount":
+			accBytes, ok := pkt.Body["Account"]
+			if !ok {
+				break
+			}
+			var acc Account
+			err := proto.Unmarshal(accBytes, &acc)
+			if err != nil {
+				return err
+			}
+			invAcc := ToInvAccount(&acc)
+			inventory.AddAccount(inventory.CurrDB, invAcc)
+		case "ApplyTransaction":
+			trBytes, ok := pkt.Body["Transaction"]
+			if !ok {
+				break
+			}
+			var tr Transaction
+			err := proto.Unmarshal(trBytes, &tr)
+			if err != nil {
+				return err
+			}
+			invTr := ToInvTransaction(&tr)
+			inventory.ApplyTransaction(inventory.CurrDB, invTr)
 		}
 	}
 	return nil

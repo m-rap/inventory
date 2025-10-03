@@ -140,7 +140,7 @@ func main() {
 	err = inventory.ApplyTransaction(db, &inventory.Transaction{
 		Description: "Owner Investment",
 		DatetimeMs:  time.Date(2025, 9, 1, 0, 0, 0, 0, time.Local).UnixMilli(),
-		Lines: []*inventory.TransactionLine{
+		TransactionLines: []*inventory.TransactionLine{
 			inventory.CreateFinancialTrLine(inventory.EquityAcc, 0, 1000, "USD"), // suntik modal
 			inventory.CreateFinancialTrLine(cashAcc, 1000, 0, "USD"),             // masuk cash
 		},
@@ -157,7 +157,7 @@ func main() {
 	err = inventory.ApplyTransaction(db, &inventory.Transaction{
 		Description: "Purchase Steel 100kg",
 		DatetimeMs:  time.Date(2025, 9, 2, 0, 0, 0, 0, time.Local).UnixMilli(),
-		Lines: []*inventory.TransactionLine{
+		TransactionLines: []*inventory.TransactionLine{
 			inventory.CreateInventoryTrLine(incomingMatAcc, steelItem, -100, "kg", steelPrice, "USD"), // incoming material
 			inventory.CreateInventoryTrLine(rawMaterialAcc, steelItem, 100, "kg", steelPrice, "USD"),  // added to raw material inventory
 			inventory.CreateFinancialTrLine(cashAcc, 0, 500, "USD"),                                   // Cash decreases
@@ -172,7 +172,7 @@ func main() {
 	err = inventory.ApplyTransaction(db, &inventory.Transaction{
 		Description: "Purchase Wood 100kg",
 		DatetimeMs:  time.Date(2025, 9, 3, 0, 0, 0, 0, time.Local).UnixMilli(),
-		Lines: []*inventory.TransactionLine{
+		TransactionLines: []*inventory.TransactionLine{
 			inventory.CreateInventoryTrLine(incomingMatAcc, woodItem, -150, "kg", woodPrice, "USD"), // incoming material
 			inventory.CreateInventoryTrLine(rawMaterialAcc, woodItem, 150, "kg", woodPrice, "USD"),  // added to raw material inventory
 			inventory.CreateFinancialTrLine(cashAcc, 0, 300, "USD"),                                 // Cash decreases
@@ -186,7 +186,7 @@ func main() {
 	err = inventory.ApplyTransaction(db, &inventory.Transaction{
 		Description: "Use Steel to Manufacture Widgets",
 		DatetimeMs:  time.Date(2025, 9, 4, 0, 0, 0, 0, time.Local).UnixMilli(),
-		Lines: []*inventory.TransactionLine{
+		TransactionLines: []*inventory.TransactionLine{
 			inventory.CreateInventoryTrLine(rawMaterialAcc, steelItem, -steelNeeded, "kg", steelPrice, "USD"),   // raw material decreases
 			inventory.CreateInventoryTrLine(workInProgressAcc, steelItem, steelNeeded, "kg", steelPrice, "USD"), // wip increases
 		},
@@ -199,7 +199,7 @@ func main() {
 	err = inventory.ApplyTransaction(db, &inventory.Transaction{
 		Description: "Complete Widgets",
 		DatetimeMs:  time.Date(2025, 9, 5, 0, 0, 0, 0, time.Local).UnixMilli(),
-		Lines: []*inventory.TransactionLine{
+		TransactionLines: []*inventory.TransactionLine{
 			inventory.CreateInventoryTrLine(workInProgressAcc, steelItem, -steelNeeded, "kg", steelPrice, "USD"),            // wip decreases
 			inventory.CreateInventoryTrLine(finishedProductAcc, steelItem, targetWidgetProduction, "kg", widgetCost, "USD"), // Finished Goods increases
 		},

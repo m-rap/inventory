@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +13,66 @@ import (
 var (
 	AssetAcc, EquityAcc, LiabilityAcc, IncomeAcc, ExpenseAcc *Account = nil, nil, nil, nil, nil
 )
+
+var Prefix string = "."
+var DBMap map[uuid.UUID]*sql.DB
+var CurrDB *sql.DB = nil
+
+func PathExists(path string) bool {
+	_, err := os.Stat(path)
+	if err != nil {
+		err2, ok := err.(*os.PathError)
+		if err == os.ErrNotExist || (ok && err2.Err == syscall.ENOENT) {
+			return false
+		}
+		fmt.Fprintf(os.Stderr, "err stat path %s: %s\n", path, err.Error())
+	}
+	return true
+}
+
+func SelectDB(dbUUID uuid.UUID) (*sql.DB, error) {
+	CurrDB, ok := DBMap[dbUUID]
+	if ok {
+		return CurrDB, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+func OpenOrCreateDB(dbUUID uuid.UUID) (*sql.DB, error) {
+	db, ok := DBMap[dbUUID]
+	if ok {
+		return db, nil
+	}
+
+	dbUUIDStr := dbUUID.String()
+
+	dirExists := PathExists(Prefix + "/" + dbUUIDStr)
+
+	if !dirExists {
+		err := os.MkdirAll(Prefix+"/"+dbUUIDStr, 0755)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	dbFileExists := PathExists(Prefix + "/" + dbUUIDStr + "/inventory.db")
+
+	db, err := sql.Open("sqlite3", "file:"+Prefix+"/"+dbUUIDStr+"/inventory.db"+"?cache=shared&mode=rwc")
+	if err != nil {
+		return nil, err
+	}
+
+	if !dbFileExists {
+		err = InitSchema(db)
+		if err != nil {
+			return db, err
+		}
+	}
+
+	DBMap[dbUUID] = db
+
+	return db, nil
+}
 
 func InitSchema(db *sql.DB) error {
 	schema := `
@@ -319,7 +380,7 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) error {
 		return err
 	}
 
-	for _, l := range transaction.Lines {
+	for _, l := range transaction.TransactionLines {
 		// fmt.Println("inserting line")
 		lineUUID, err := uuid.NewV6()
 		if err != nil {

@@ -43,13 +43,13 @@ type Item struct {
 }
 
 type Transaction struct {
-	ID          int
-	UUID        uuid.UUID
-	Description string
-	DatetimeMs  int64
-	Year        int
-	Month       uint8
-	Lines       []*TransactionLine
+	ID               int
+	UUID             uuid.UUID
+	Description      string
+	DatetimeMs       int64
+	Year             int
+	Month            uint8
+	TransactionLines []*TransactionLine
 }
 
 type TransactionLine struct {

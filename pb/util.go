@@ -70,3 +70,49 @@ func ToInvItem(item *Item) *inventory.Item {
 		Unit:        item.Unit,
 	}
 }
+
+func ToInvAccount(acc *Account) *inventory.Account {
+	accUUID, _ := uuid.FromBytes(acc.UUID)
+	parentUUID, _ := uuid.FromBytes(acc.ParentUUID)
+	return &inventory.Account{
+		UUID: accUUID,
+		Name: acc.Name,
+		Parent: &inventory.Account{
+			UUID: parentUUID,
+		},
+	}
+}
+
+func ToInvTransaction(tr *Transaction) *inventory.Transaction {
+	trUUID, _ := uuid.FromBytes(tr.UUID)
+	var trLines []*inventory.TransactionLine
+	for i := range tr.TransactionLines {
+		trl := tr.TransactionLines[i]
+		trLineUUID, _ := uuid.FromBytes(trl.UUID)
+		accUUID, _ := uuid.FromBytes(trl.AccountUUID)
+		itUUID, _ := uuid.FromBytes(trl.ItemUUID)
+		trLines = append(trLines, &inventory.TransactionLine{
+			UUID: trLineUUID,
+			Transaction: &inventory.Transaction{
+				UUID: trUUID,
+			},
+			Account: &inventory.Account{
+				UUID: accUUID,
+			},
+			Item: &inventory.Item{
+				UUID: itUUID,
+			},
+			Quantity: trl.Quantity,
+			Unit:     trl.Unit,
+			Price:    trl.Price,
+			Currency: trl.Currency,
+			Note:     trl.Note,
+		})
+	}
+	return &inventory.Transaction{
+		UUID:             trUUID,
+		Description:      tr.Description,
+		DatetimeMs:       tr.DatetimeMs,
+		TransactionLines: trLines,
+	}
+}
