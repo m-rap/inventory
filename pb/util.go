@@ -151,6 +151,35 @@ func ToInvTransaction(tr *Transaction) *inventory.Transaction {
 	}
 }
 
+func NewMarketPrice(p *inventory.MarketPrice) *MarketPrice {
+	var itemUUID []byte
+	if p.Item != nil {
+		itemUUID = p.Item.UUID
+	} else {
+		itemUUID = nil
+	}
+	return &MarketPrice{
+		ItemUUID:   itemUUID,
+		DatetimeMs: p.DatetimeMs,
+		Price:      p.Price,
+		Unit:       p.Unit,
+		Currency:   p.Currency,
+	}
+}
+
+func ToInvMarketPrice(p *MarketPrice) *inventory.MarketPrice {
+
+	return &inventory.MarketPrices{
+		Item: &inventory.Item{
+			UUID: p.ItemUUID,
+		},
+		DatetimeMs: p.DatetimeMs,
+		Price:      p.Price,
+		Unit:       p.Unit,
+		Currency:   p.Currency,
+	}
+}
+
 func NewMapOfBytes(m map[string][]byte) *MapOfBytes {
 	return &MapOfBytes{
 		Content: m,

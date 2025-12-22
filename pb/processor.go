@@ -51,6 +51,7 @@ var ErrCurrDbNotRegistered = errors.New("curr db not registered")
 var ErrReqHasNoFunc = errors.New("request has no function")
 var ErrCurrDbNil = errors.New("curr db nil")
 var ErrReqHasNoArg = errors.New("request has no arg")
+var ErrNoSuchFunc = errors.New("no such func")
 
 // returns packet, message, code, error
 func CreateRespPkt(UUID uuid.UUID, code int32, payload map[string][]byte, err error, format string, a ...any) (*inventoryrpc.Packet, string, int32, error) {

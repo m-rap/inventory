@@ -8,6 +8,25 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+var ServerFuncs = []string{
+	"GetCurrDB",
+	"OpenOrCreateDB",
+	"AddItem",
+	"AddAccount",
+	"ApplyTransaction",
+	"GetMainAccounts",
+	"UpdateMarketPrice",
+}
+
+func StrsContains(strs []string, searchVal string) bool {
+	for i := range strs {
+		if strs[i] == searchVal {
+			return true
+		}
+	}
+	return false
+}
+
 type ServerProcessor struct {
 	ProcessingChan                 chan *inventoryrpc.Packet
 	ConsumeProcessingResponseFuncs []ConsumeProcessingResponseFunc
@@ -30,11 +49,15 @@ func (p *ServerProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Pa
 	var payload map[string][]byte
 	argBytes, argOk := pkt.Body["arg"]
 
+	if !StrsContains(FuncStrs, funcStr) {
+		return CreateRespPkt(pkt.UUID, -202, nil, ErrReqHasNoFunc, ErrNoSuchFunc.Error())
+	}
+
 	// layer 1, check curr db
 	switch funcStr {
 	case "GetCurrDB", "AddItem", "AddAccount", "ApplyTransaction", "GetMainAccounts":
 		if inventory.CurrDB == nil {
-			return CreateRespPkt(pkt.UUID, -202, nil, ErrCurrDbNil, ErrCurrDbNil.Error())
+			return CreateRespPkt(pkt.UUID, -203, nil, ErrCurrDbNil, ErrCurrDbNil.Error())
 		}
 	}
 
@@ -42,7 +65,7 @@ func (p *ServerProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Pa
 	switch funcStr {
 	case "AddItem", "AddAccount", "ApplyTransaction":
 		if !argOk {
-			return CreateRespPkt(pkt.UUID, -203, nil, ErrReqHasNoArg, ErrCurrDbNil.Error())
+			return CreateRespPkt(pkt.UUID, -204, nil, ErrReqHasNoArg, ErrCurrDbNil.Error())
 		}
 	}
 
@@ -128,6 +151,17 @@ func (p *ServerProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Pa
 		}
 		for _, a := range accs {
 			payload[a.Name] = a.UUID[:]
+		}
+	case "UpdateMarketPrice":
+		var price MarketPrice
+		err = proto.Unmarshal(argBytes, &price)
+		if err != nil {
+			return CreateRespPktErrUnmarshall(pkt.UUID, err)
+		}
+		invPrice := ToInvPrice(&price)
+		entityUUIDBytes, err := inventory.UpdateMarketPrice(inventory.CurrDB, invPrice)
+		if err != nil {
+			return CreateRespPktErrExecFunc(pkt.UUID, err)
 		}
 	}
 
