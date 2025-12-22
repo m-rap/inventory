@@ -829,6 +829,50 @@ func (x *Packet) GetBody() map[string][]byte {
 	return nil
 }
 
+type MapOfBytes struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Content       map[string][]byte      `protobuf:"bytes,1,rep,name=content,proto3" json:"content,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapOfBytes) Reset() {
+	*x = MapOfBytes{}
+	mi := &file_inventory_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapOfBytes) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapOfBytes) ProtoMessage() {}
+
+func (x *MapOfBytes) ProtoReflect() protoreflect.Message {
+	mi := &file_inventory_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapOfBytes.ProtoReflect.Descriptor instead.
+func (*MapOfBytes) Descriptor() ([]byte, []int) {
+	return file_inventory_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *MapOfBytes) GetContent() map[string][]byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
 var File_inventory_proto protoreflect.FileDescriptor
 
 const file_inventory_proto_rawDesc = "" +
@@ -922,6 +966,12 @@ const file_inventory_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\x1a7\n" +
 	"\tBodyEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"\x88\x01\n" +
+	"\n" +
+	"MapOfBytes\x12>\n" +
+	"\acontent\x18\x01 \x03(\v2$.inventorypb.MapOfBytes.ContentEntryR\acontent\x1a:\n" +
+	"\fContentEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01B\x17Z\x15inventory/inventorypbb\x06proto3"
 
 var (
@@ -936,7 +986,7 @@ func file_inventory_proto_rawDescGZIP() []byte {
 	return file_inventory_proto_rawDescData
 }
 
-var file_inventory_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_inventory_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_inventory_proto_goTypes = []any{
 	(*Account)(nil),                  // 0: inventorypb.Account
 	(*Item)(nil),                     // 1: inventorypb.Item
@@ -948,21 +998,24 @@ var file_inventory_proto_goTypes = []any{
 	(*CurrencyConversions)(nil),      // 7: inventorypb.CurrencyConversions
 	(*MarketPrices)(nil),             // 8: inventorypb.MarketPrices
 	(*Packet)(nil),                   // 9: inventorypb.Packet
-	nil,                              // 10: inventorypb.Packet.MetaEntry
-	nil,                              // 11: inventorypb.Packet.BodyEntry
+	(*MapOfBytes)(nil),               // 10: inventorypb.MapOfBytes
+	nil,                              // 11: inventorypb.Packet.MetaEntry
+	nil,                              // 12: inventorypb.Packet.BodyEntry
+	nil,                              // 13: inventorypb.MapOfBytes.ContentEntry
 }
 var file_inventory_proto_depIdxs = []int32{
 	3,  // 0: inventorypb.Account.TransactionLines:type_name -> inventorypb.TransactionLine
 	3,  // 1: inventorypb.Item.TransactionLines:type_name -> inventorypb.TransactionLine
 	3,  // 2: inventorypb.Transaction.TransactionLines:type_name -> inventorypb.TransactionLine
 	4,  // 3: inventorypb.BalanceHistory.references:type_name -> inventorypb.BalanceHistoryReferences
-	10, // 4: inventorypb.Packet.Meta:type_name -> inventorypb.Packet.MetaEntry
-	11, // 5: inventorypb.Packet.Body:type_name -> inventorypb.Packet.BodyEntry
-	6,  // [6:6] is the sub-list for method output_type
-	6,  // [6:6] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	11, // 4: inventorypb.Packet.Meta:type_name -> inventorypb.Packet.MetaEntry
+	12, // 5: inventorypb.Packet.Body:type_name -> inventorypb.Packet.BodyEntry
+	13, // 6: inventorypb.MapOfBytes.content:type_name -> inventorypb.MapOfBytes.ContentEntry
+	7,  // [7:7] is the sub-list for method output_type
+	7,  // [7:7] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_inventory_proto_init() }
@@ -976,7 +1029,7 @@ func file_inventory_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_inventory_proto_rawDesc), len(file_inventory_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

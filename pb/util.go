@@ -3,8 +3,10 @@ package inventorypb
 import (
 	"inventory"
 	"inventoryrpc"
+	"log"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
 )
 
 func NewPacket(pkt *inventoryrpc.Packet) *Packet {
@@ -26,7 +28,7 @@ func ToInvPacket(pkt *Packet) *inventoryrpc.Packet {
 	}
 }
 
-func NewTransactionLine(transactionLine inventory.TransactionLine) *TransactionLine {
+func NewTransactionLine(transactionLine *inventory.TransactionLine) *TransactionLine {
 	trLine := &TransactionLine{
 		UUID:     transactionLine.UUID[:],
 		Quantity: transactionLine.Quantity,
@@ -47,7 +49,20 @@ func NewTransactionLine(transactionLine inventory.TransactionLine) *TransactionL
 	return trLine
 }
 
-func NewItem(item *inventory.Item, transactionLines []inventory.TransactionLine) *Item {
+func NewTransaction(transaction inventory.Transaction) *Transaction {
+	var lines []*TransactionLine
+	for i := range transaction.TransactionLines {
+		lines = append(lines, NewTransactionLine(transaction.TransactionLines[i]))
+	}
+	return &Transaction{
+		UUID:             transaction.UUID[:],
+		Description:      transaction.Description,
+		DatetimeMs:       transaction.DatetimeMs,
+		TransactionLines: lines,
+	}
+}
+
+func NewItem(item *inventory.Item, transactionLines []*inventory.TransactionLine) *Item {
 	var lines []*TransactionLine
 	for i := range transactionLines {
 		lines = append(lines, NewTransactionLine(transactionLines[i]))
@@ -68,6 +83,25 @@ func ToInvItem(item *Item) *inventory.Item {
 		Name:        item.Name,
 		Description: item.Description,
 		Unit:        item.Unit,
+	}
+}
+
+func NewAccount(account *inventory.Account, transactionLines []*inventory.TransactionLine) *Account {
+	var lines []*TransactionLine
+	for i := range transactionLines {
+		lines = append(lines, NewTransactionLine(transactionLines[i]))
+	}
+	var parentUUID []byte
+	if account.Parent != nil {
+		parentUUID = account.Parent.UUID[:]
+	} else {
+		parentUUID = nil
+	}
+	return &Account{
+		UUID:             account.UUID[:],
+		Name:             account.Name,
+		ParentUUID:       parentUUID,
+		TransactionLines: lines,
 	}
 }
 
@@ -115,4 +149,34 @@ func ToInvTransaction(tr *Transaction) *inventory.Transaction {
 		DatetimeMs:       tr.DatetimeMs,
 		TransactionLines: trLines,
 	}
+}
+
+func NewMapOfBytes(m map[string][]byte) *MapOfBytes {
+	return &MapOfBytes{
+		Content: m,
+	}
+}
+
+func CreateRequest(reqFunc string, params proto.Message) (uuid.UUID, []byte, error) {
+	paramBin, err := proto.Marshal(params)
+	if err != nil {
+		return uuid.UUID{}, nil, err
+	}
+
+	pktUUID, err := uuid.NewV6()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	pktBin, err := proto.Marshal(&Packet{
+		UUID: pktUUID[:],
+		Type: inventoryrpc.TypeReq,
+		Meta: nil,
+		Body: map[string][]byte{
+			"function": []byte(reqFunc),
+			"arg":      paramBin,
+		},
+	})
+
+	return pktUUID, pktBin, err
 }

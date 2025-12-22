@@ -14,7 +14,7 @@ var (
 	AssetAcc, EquityAcc, LiabilityAcc, IncomeAcc, ExpenseAcc *Account = nil, nil, nil, nil, nil
 )
 
-var Prefix string = "."
+var Prefix string = "./db"
 var DBMap map[uuid.UUID]*sql.DB
 var CurrDB *sql.DB = nil
 
@@ -30,17 +30,14 @@ func PathExists(path string) bool {
 	return true
 }
 
-func SelectDB(dbUUID uuid.UUID) (*sql.DB, error) {
-	CurrDB, ok := DBMap[dbUUID]
-	if ok {
-		return CurrDB, nil
-	}
-	return nil, os.ErrNotExist
-}
-
 func OpenOrCreateDB(dbUUID uuid.UUID) (*sql.DB, error) {
 	db, ok := DBMap[dbUUID]
 	if ok {
+		CurrDB = db
+		_, _, err := BuildAccountTree(db)
+		if err != nil {
+			return db, err
+		}
 		return db, nil
 	}
 
@@ -67,11 +64,56 @@ func OpenOrCreateDB(dbUUID uuid.UUID) (*sql.DB, error) {
 		if err != nil {
 			return db, err
 		}
+	} else {
+		_, _, err = BuildAccountTree(db)
+		if err != nil {
+			return db, err
+		}
 	}
 
 	DBMap[dbUUID] = db
+	CurrDB = db
 
 	return db, nil
+}
+
+func LoadDBMap() error {
+	files, err := os.ReadDir(Prefix)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		if !file.IsDir() {
+			continue
+		}
+		dbUUID, err := uuid.Parse(file.Name())
+		if err != nil {
+			continue
+		}
+		OpenOrCreateDB(dbUUID)
+	}
+	return nil
+}
+
+func DbExistsInStorage(UUID uuid.UUID) (bool, error) {
+	files, err := os.ReadDir(Prefix)
+	if err != nil {
+		return false, err
+	}
+	UUIDStr := UUID.String()
+	for _, file := range files {
+		if !file.IsDir() {
+			continue
+		}
+		if UUIDStr == file.Name() {
+			_, err = OpenOrCreateDB(UUID)
+			if err != nil {
+				return false, err
+			}
+			break
+		}
+	}
+	return true, nil
 }
 
 func InitSchema(db *sql.DB) error {
@@ -340,6 +382,16 @@ func CreateInventoryTrLine(acc *Account, item *Item, qty float64, unit string, p
 	}
 }
 
+func CreateInventoryTrLineWithUUID(accUUID uuid.UUID, itemUUID uuid.UUID, qty float64, unit string, price float64, currency string) *TransactionLine {
+	acc := &Account{
+		UUID: accUUID,
+	}
+	item := &Item{
+		UUID: itemUUID,
+	}
+	return CreateInventoryTrLine(acc, item, qty, unit, price, currency)
+}
+
 func CreateFinancialTrLine(acc *Account, debet float64, kredit float64, currency string) *TransactionLine {
 	amount := debet - kredit
 	return &TransactionLine{
@@ -351,16 +403,34 @@ func CreateFinancialTrLine(acc *Account, debet float64, kredit float64, currency
 	}
 }
 
-func ApplyTransaction(db *sql.DB, transaction *Transaction) error {
+func CreateFinancialTrLineWithUUID(accUUID uuid.UUID, debet float64, kredit float64, currency string) *TransactionLine {
+	acc := &Account{
+		UUID: accUUID,
+	}
+	return CreateFinancialTrLine(acc, debet, kredit, currency)
+}
+
+func CreateFinancialTrLineWithAccUUIDBytes(accUUIDBytes []byte, debet float64, kredit float64, currency string) (*TransactionLine, error) {
+	accUUID, err := uuid.FromBytes(accUUIDBytes)
+	if err != nil {
+		return nil, err
+	}
+	acc := &Account{
+		UUID: accUUID,
+	}
+	return CreateFinancialTrLine(acc, debet, kredit, currency), nil
+}
+
+func ApplyTransaction(db *sql.DB, transaction *Transaction) ([]byte, error) {
 	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback()
 
 	trUUID, err := uuid.NewV6()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var res sql.Result
@@ -371,13 +441,13 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) error {
 
 	if err != nil {
 		tx.Rollback()
-		return err
+		return nil, err
 	}
 
 	trID, err := res.LastInsertId()
 	if err != nil {
 		tx.Rollback()
-		return err
+		return nil, err
 	}
 
 	for _, l := range transaction.TransactionLines {
@@ -385,7 +455,7 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) error {
 		lineUUID, err := uuid.NewV6()
 		if err != nil {
 			tx.Rollback()
-			return err
+			return nil, err
 		}
 		var itemID int
 		if l.Item != nil {
@@ -399,7 +469,7 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) error {
 			lineUUID[:], trID, l.Account.ID, sql.NullInt64{Int64: int64(itemID), Valid: itemID != -1}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
 		if err != nil {
 			tx.Rollback()
-			return err
+			return nil, err
 		}
 
 		// fmt.Println("finding prev qty and prev total")
@@ -417,7 +487,7 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) error {
 			prevQty, prevTotal = 0, 0
 		} else if err != nil {
 			tx.Rollback()
-			return err
+			return nil, err
 		}
 
 		newQty := prevQty + l.Quantity
@@ -431,7 +501,7 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) error {
 		histUUID, err := uuid.NewV6()
 		if err != nil {
 			tx.Rollback()
-			return err
+			return nil, err
 		}
 
 		_, err = tx.Exec(`INSERT INTO balance_history(uuid,item_id,account_id,transaction_id,quantity,total_cost,avg_cost)
@@ -439,13 +509,13 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) error {
 			histUUID[:], itemID, l.Account.ID, trID, newQty, newTotal, avgCost)
 		if err != nil {
 			tx.Rollback()
-			return err
+			return nil, err
 		}
 	}
 
 	// fmt.Println("committing")
 	tx.Commit()
-	return nil
+	return trUUID[:], nil
 }
 
 func UpdateMarketPrice(db *sql.DB, marketPrice *MarketPrices) error {

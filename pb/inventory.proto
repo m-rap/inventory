@@ -88,3 +88,7 @@ message Packet {
 	map<string, bytes> Meta = 3;
 	map<string, bytes> Body = 4;
 }
+
+message MapOfBytes {
+	map<string, bytes> content = 1;
+}
