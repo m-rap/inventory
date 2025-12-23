@@ -101,6 +101,12 @@ type PacketReceiver struct {
 	Processor         ProcessorInterface
 }
 
+func NewPacketReceiver() *PacketReceiver {
+	return &PacketReceiver{
+		PktBeingProcessed: map[uuid.UUID]*inventoryrpc.Packet{},
+	}
+}
+
 func (p *PacketReceiver) HandleIncoming(incomingBytes []byte) error {
 	if p.Processor == nil {
 		return ErrNoProcessor

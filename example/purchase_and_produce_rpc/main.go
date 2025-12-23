@@ -8,6 +8,7 @@ import (
 	"inventorypb"
 	"inventoryrpc"
 	"log"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,13 +27,19 @@ var (
 	steelItem, woodItem, widget1Item, widget2Item uuid.UUID
 )
 
-var serverPktReceiver inventorypb.PacketReceiver
-var serverProcessor inventorypb.ServerProcessor
-var clientPktReceiver inventorypb.PacketReceiver
-var clientProcessor ClientProcessor
+var serverPktReceiver *inventorypb.PacketReceiver
+var serverProcessor *inventorypb.ServerProcessor
+var clientPktReceiver *inventorypb.PacketReceiver
+var clientProcessor *ClientProcessor
 
 type ClientProcessor struct {
 	PktChan chan *inventoryrpc.Packet
+}
+
+func NewClientProcessor() *ClientProcessor {
+	return &ClientProcessor{
+		PktChan: make(chan *inventoryrpc.Packet),
+	}
 }
 
 func (p *ClientProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Packet, string, int32, error) {
@@ -44,8 +51,8 @@ func (p *ClientProcessor) PostProcessPkt(responsePkt *inventoryrpc.Packet) error
 	return nil
 }
 
-var mainAccountUUIDBytes map[string][]byte
-var mainAccountUUIDs map[string]uuid.UUID
+var mainAccountUUIDBytes = map[string][]byte{}
+var mainAccountUUIDs = map[string]uuid.UUID{}
 
 func waitResponse(pktUUID uuid.UUID) (*inventoryrpc.Packet, error) {
 	responsePkt := <-clientProcessor.PktChan
@@ -62,11 +69,15 @@ func waitResponse(pktUUID uuid.UUID) (*inventoryrpc.Packet, error) {
 }
 
 func sendReqAndWaitResponse(funcName string, params protoreflect.ProtoMessage) (*inventoryrpc.Packet, error) {
-	pktUUID, pktBytes, err := inventorypb.CreateRequest("GetMainAccounts", params)
+	pktUUID, pktBytes, err := inventorypb.CreateRequest(funcName, params)
 	if err != nil {
 		return nil, err
 	}
-	serverPktReceiver.HandleIncoming(pktBytes)
+	pktWrapper, err := inventoryrpc.EncodePacketWrapper(pktBytes)
+	if err != nil {
+		return nil, err
+	}
+	serverPktReceiver.HandleIncoming(pktWrapper)
 	return waitResponse(pktUUID)
 }
 
@@ -94,7 +105,7 @@ func sendCreateAccountReq(name string, parentUUIDBytes []byte) ([]byte, uuid.UUI
 	var parent *inventory.Account
 	if parentUUIDBytes != nil {
 		parentUUID, err := uuid.FromBytes(parentUUIDBytes)
-		if err == nil {
+		if err != nil {
 			return nil, uuid.UUID{}, err
 		}
 		parent = &inventory.Account{
@@ -228,13 +239,27 @@ func createAccountsAndItems() error {
 }
 
 func main() {
-	serverPktReceiver.Processor = &serverProcessor
-	serverProcessor.ConsumeProcessingResponseFuncs = append(serverProcessor.ConsumeProcessingResponseFuncs, func(pkt []byte) {
-		clientPktReceiver.HandleIncoming(pkt)
+	serverProcessor = inventorypb.NewServerProcessor()
+	serverPktReceiver = inventorypb.NewPacketReceiver()
+	serverPktReceiver.Processor = serverProcessor
+	serverProcessor.ConsumeProcessingResponseFuncs = append(serverProcessor.ConsumeProcessingResponseFuncs, func(pktBytes []byte) {
+		pktWrapper, err := inventoryrpc.EncodePacketWrapper(pktBytes)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			return
+		}
+		clientPktReceiver.HandleIncoming(pktWrapper)
 	})
-	clientPktReceiver.Processor = &clientProcessor
+	clientProcessor = NewClientProcessor()
+	clientPktReceiver = inventorypb.NewPacketReceiver()
+	clientPktReceiver.Processor = clientProcessor
 
 	var err error
+
+	_ = os.RemoveAll("db/")
+	if inventory.PathExists("db/") {
+		log.Fatalln("db exists")
+	}
 
 	fmt.Println("init db")
 	_, err = sendReqAndWaitResponse("OpenOrCreateDB", nil)

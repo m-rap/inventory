@@ -125,17 +125,29 @@ func ToInvTransaction(tr *Transaction) *inventory.Transaction {
 		trLineUUID, _ := uuid.FromBytes(trl.UUID)
 		accUUID, _ := uuid.FromBytes(trl.AccountUUID)
 		itUUID, _ := uuid.FromBytes(trl.ItemUUID)
+		var acc *inventory.Account
+		if accUUID != uuid.Nil {
+			acc = &inventory.Account{
+				UUID: accUUID,
+			}
+		} else {
+			acc = nil
+		}
+		var item *inventory.Item
+		if itUUID != uuid.Nil {
+			item = &inventory.Item{
+				UUID: itUUID,
+			}
+		} else {
+			item = nil
+		}
 		trLines = append(trLines, &inventory.TransactionLine{
 			UUID: trLineUUID,
 			Transaction: &inventory.Transaction{
 				UUID: trUUID,
 			},
-			Account: &inventory.Account{
-				UUID: accUUID,
-			},
-			Item: &inventory.Item{
-				UUID: itUUID,
-			},
+			Account:  acc,
+			Item:     item,
 			Quantity: trl.Quantity,
 			Unit:     trl.Unit,
 			Price:    trl.Price,

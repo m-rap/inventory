@@ -15,7 +15,7 @@ var (
 )
 
 var Prefix string = "./db"
-var DBMap map[uuid.UUID]*sql.DB
+var DBMap = map[uuid.UUID]*sql.DB{}
 var CurrDB *sql.DB = nil
 
 func PathExists(path string) bool {
@@ -459,9 +459,25 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) ([]byte, error) {
 		}
 		var itemID int
 		if l.Item != nil {
+			if l.Item.ID <= 0 {
+				tmpItem, err := GetItemByUUID(db, l.Item.UUID[:])
+				if err != nil {
+					tx.Rollback()
+					return nil, err
+				}
+				*l.Item = *tmpItem
+			}
 			itemID = l.Item.ID
 		} else {
 			itemID = -1
+		}
+		if l.Account.ID <= 0 {
+			tmpAcc, err := GetAccountByUUID(db, l.Account.UUID[:])
+			if err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+			*l.Account = *tmpAcc
 		}
 		// fmt.Println(lineUUID, trID, l.Account.ID, sql.NullInt64{Int64: int64(itemID), Valid: itemID != -1}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
 		_, err = tx.Exec(

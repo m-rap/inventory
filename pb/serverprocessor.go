@@ -48,8 +48,11 @@ func (p *ServerProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Pa
 	}
 
 	funcStr := string(funcBytes)
-	var payload map[string][]byte
+	payload := map[string][]byte{}
 	argBytes, argOk := pkt.Body["arg"]
+	if argOk && len(argBytes) == 0 {
+		argOk = false
+	}
 
 	if !StrsContains(ServerFuncs, funcStr) {
 		return CreateRespPkt(pkt.UUID, -202, nil, ErrReqHasNoFunc, ErrNoSuchFunc.Error())

@@ -10,6 +10,13 @@
             "request": "launch",
             "mode": "auto",
             "program": "${fileDirname}"
+        },
+        {
+            "name": "example:purchase_and_produce_rpc",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/example/purchase_and_produce_rpc"
         }
     ]
 }

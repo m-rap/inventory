@@ -137,7 +137,7 @@ func main() {
 
 	fmt.Println("apply transactions")
 	// Transaction: Owner invests 1000 USD equity → Cash
-	err = inventory.ApplyTransaction(db, &inventory.Transaction{
+	_, err = inventory.ApplyTransaction(db, &inventory.Transaction{
 		Description: "Owner Investment",
 		DatetimeMs:  time.Date(2025, 9, 1, 0, 0, 0, 0, time.Local).UnixMilli(),
 		TransactionLines: []*inventory.TransactionLine{
@@ -154,7 +154,7 @@ func main() {
 	targetWidgetProduction := 10.0
 	steelNeeded := widgetSteelNeed * targetWidgetProduction
 
-	err = inventory.ApplyTransaction(db, &inventory.Transaction{
+	_, err = inventory.ApplyTransaction(db, &inventory.Transaction{
 		Description: "Purchase Steel 100kg",
 		DatetimeMs:  time.Date(2025, 9, 2, 0, 0, 0, 0, time.Local).UnixMilli(),
 		TransactionLines: []*inventory.TransactionLine{
@@ -169,7 +169,7 @@ func main() {
 	}
 
 	woodPrice := 3.0
-	err = inventory.ApplyTransaction(db, &inventory.Transaction{
+	_, err = inventory.ApplyTransaction(db, &inventory.Transaction{
 		Description: "Purchase Wood 100kg",
 		DatetimeMs:  time.Date(2025, 9, 3, 0, 0, 0, 0, time.Local).UnixMilli(),
 		TransactionLines: []*inventory.TransactionLine{
@@ -183,7 +183,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = inventory.ApplyTransaction(db, &inventory.Transaction{
+	_, err = inventory.ApplyTransaction(db, &inventory.Transaction{
 		Description: "Use Steel to Manufacture Widgets",
 		DatetimeMs:  time.Date(2025, 9, 4, 0, 0, 0, 0, time.Local).UnixMilli(),
 		TransactionLines: []*inventory.TransactionLine{
@@ -196,7 +196,7 @@ func main() {
 	}
 
 	widgetCost := steelNeeded * steelPrice / targetWidgetProduction // 100kg steel makes 50 widgets at 5 USD/kg
-	err = inventory.ApplyTransaction(db, &inventory.Transaction{
+	_, err = inventory.ApplyTransaction(db, &inventory.Transaction{
 		Description: "Complete Widgets",
 		DatetimeMs:  time.Date(2025, 9, 5, 0, 0, 0, 0, time.Local).UnixMilli(),
 		TransactionLines: []*inventory.TransactionLine{
@@ -211,7 +211,7 @@ func main() {
 	fmt.Println("update market price")
 
 	// Market prices
-	err = inventory.UpdateMarketPrice(db, &inventory.MarketPrices{
+	err = inventory.UpdateMarketPrice(db, &inventory.MarketPrice{
 		Item: &inventory.Item{
 			UUID: steelItem.UUID,
 		},
@@ -224,7 +224,7 @@ func main() {
 	}
 
 	// Market prices
-	err = inventory.UpdateMarketPrice(db, &inventory.MarketPrices{
+	err = inventory.UpdateMarketPrice(db, &inventory.MarketPrice{
 		Item: &inventory.Item{
 			UUID: steelItem.UUID,
 		},
