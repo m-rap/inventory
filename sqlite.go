@@ -518,7 +518,7 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) ([]byte, error) {
 	return trUUID[:], nil
 }
 
-func UpdateMarketPrice(db *sql.DB, marketPrice *MarketPrices) error {
+func UpdateMarketPrice(db *sql.DB, marketPrice *MarketPrice) error {
 	item, err := GetItemByUUID(db, marketPrice.Item.UUID[:])
 	if err != nil {
 		return err

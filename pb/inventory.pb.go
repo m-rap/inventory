@@ -685,7 +685,7 @@ func (x *CurrencyConversions) GetDatetimeMs() int64 {
 	return 0
 }
 
-type MarketPrices struct {
+type MarketPrice struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ItemUUID      []byte                 `protobuf:"bytes,1,opt,name=ItemUUID,proto3" json:"ItemUUID,omitempty"`
 	DatetimeMs    int64                  `protobuf:"zigzag64,2,opt,name=DatetimeMs,proto3" json:"DatetimeMs,omitempty"`
@@ -696,20 +696,20 @@ type MarketPrices struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *MarketPrices) Reset() {
-	*x = MarketPrices{}
+func (x *MarketPrice) Reset() {
+	*x = MarketPrice{}
 	mi := &file_inventory_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *MarketPrices) String() string {
+func (x *MarketPrice) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*MarketPrices) ProtoMessage() {}
+func (*MarketPrice) ProtoMessage() {}
 
-func (x *MarketPrices) ProtoReflect() protoreflect.Message {
+func (x *MarketPrice) ProtoReflect() protoreflect.Message {
 	mi := &file_inventory_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -721,40 +721,40 @@ func (x *MarketPrices) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MarketPrices.ProtoReflect.Descriptor instead.
-func (*MarketPrices) Descriptor() ([]byte, []int) {
+// Deprecated: Use MarketPrice.ProtoReflect.Descriptor instead.
+func (*MarketPrice) Descriptor() ([]byte, []int) {
 	return file_inventory_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *MarketPrices) GetItemUUID() []byte {
+func (x *MarketPrice) GetItemUUID() []byte {
 	if x != nil {
 		return x.ItemUUID
 	}
 	return nil
 }
 
-func (x *MarketPrices) GetDatetimeMs() int64 {
+func (x *MarketPrice) GetDatetimeMs() int64 {
 	if x != nil {
 		return x.DatetimeMs
 	}
 	return 0
 }
 
-func (x *MarketPrices) GetPrice() float64 {
+func (x *MarketPrice) GetPrice() float64 {
 	if x != nil {
 		return x.Price
 	}
 	return 0
 }
 
-func (x *MarketPrices) GetUnit() string {
+func (x *MarketPrice) GetUnit() string {
 	if x != nil {
 		return x.Unit
 	}
 	return ""
 }
 
-func (x *MarketPrices) GetCurrency() string {
+func (x *MarketPrice) GetCurrency() string {
 	if x != nil {
 		return x.Currency
 	}
@@ -947,8 +947,8 @@ const file_inventory_proto_rawDesc = "" +
 	"\x04Rate\x18\x03 \x01(\x01R\x04Rate\x12\x1e\n" +
 	"\n" +
 	"DatetimeMs\x18\x04 \x01(\x12R\n" +
-	"DatetimeMs\"\x90\x01\n" +
-	"\fMarketPrices\x12\x1a\n" +
+	"DatetimeMs\"\x8f\x01\n" +
+	"\vMarketPrice\x12\x1a\n" +
 	"\bItemUUID\x18\x01 \x01(\fR\bItemUUID\x12\x1e\n" +
 	"\n" +
 	"DatetimeMs\x18\x02 \x01(\x12R\n" +
@@ -996,7 +996,7 @@ var file_inventory_proto_goTypes = []any{
 	(*BalanceHistory)(nil),           // 5: inventorypb.BalanceHistory
 	(*UnitConversions)(nil),          // 6: inventorypb.UnitConversions
 	(*CurrencyConversions)(nil),      // 7: inventorypb.CurrencyConversions
-	(*MarketPrices)(nil),             // 8: inventorypb.MarketPrices
+	(*MarketPrice)(nil),              // 8: inventorypb.MarketPrice
 	(*Packet)(nil),                   // 9: inventorypb.Packet
 	(*MapOfBytes)(nil),               // 10: inventorypb.MapOfBytes
 	nil,                              // 11: inventorypb.Packet.MetaEntry

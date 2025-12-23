@@ -74,7 +74,7 @@ message CurrencyConversions {
 	sint64 DatetimeMs = 4;
 }
 
-message MarketPrices {
+message MarketPrice {
 	bytes ItemUUID = 1;
 	sint64 DatetimeMs = 2;
 	double Price = 3;

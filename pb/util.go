@@ -49,7 +49,7 @@ func NewTransactionLine(transactionLine *inventory.TransactionLine) *Transaction
 	return trLine
 }
 
-func NewTransaction(transaction inventory.Transaction) *Transaction {
+func NewTransaction(transaction *inventory.Transaction) *Transaction {
 	var lines []*TransactionLine
 	for i := range transaction.TransactionLines {
 		lines = append(lines, NewTransactionLine(transaction.TransactionLines[i]))
@@ -154,7 +154,7 @@ func ToInvTransaction(tr *Transaction) *inventory.Transaction {
 func NewMarketPrice(p *inventory.MarketPrice) *MarketPrice {
 	var itemUUID []byte
 	if p.Item != nil {
-		itemUUID = p.Item.UUID
+		itemUUID = p.Item.UUID[:]
 	} else {
 		itemUUID = nil
 	}
@@ -168,10 +168,10 @@ func NewMarketPrice(p *inventory.MarketPrice) *MarketPrice {
 }
 
 func ToInvMarketPrice(p *MarketPrice) *inventory.MarketPrice {
-
-	return &inventory.MarketPrices{
+	itemUUID, _ := uuid.FromBytes(p.ItemUUID)
+	return &inventory.MarketPrice{
 		Item: &inventory.Item{
-			UUID: p.ItemUUID,
+			UUID: itemUUID,
 		},
 		DatetimeMs: p.DatetimeMs,
 		Price:      p.Price,

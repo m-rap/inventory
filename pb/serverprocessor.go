@@ -16,6 +16,8 @@ var ServerFuncs = []string{
 	"ApplyTransaction",
 	"GetMainAccounts",
 	"UpdateMarketPrice",
+	"PrintBalances",
+	"PrintMarketBalances",
 }
 
 func StrsContains(strs []string, searchVal string) bool {
@@ -49,13 +51,13 @@ func (p *ServerProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Pa
 	var payload map[string][]byte
 	argBytes, argOk := pkt.Body["arg"]
 
-	if !StrsContains(FuncStrs, funcStr) {
+	if !StrsContains(ServerFuncs, funcStr) {
 		return CreateRespPkt(pkt.UUID, -202, nil, ErrReqHasNoFunc, ErrNoSuchFunc.Error())
 	}
 
 	// layer 1, check curr db
 	switch funcStr {
-	case "GetCurrDB", "AddItem", "AddAccount", "ApplyTransaction", "GetMainAccounts":
+	case "GetCurrDB", "AddItem", "AddAccount", "ApplyTransaction", "GetMainAccounts", "UpdateMarketPrice", "PrintBalances", "PrintMarketBalances":
 		if inventory.CurrDB == nil {
 			return CreateRespPkt(pkt.UUID, -203, nil, ErrCurrDbNil, ErrCurrDbNil.Error())
 		}
@@ -63,7 +65,7 @@ func (p *ServerProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Pa
 
 	// layer 2, check arg ok
 	switch funcStr {
-	case "AddItem", "AddAccount", "ApplyTransaction":
+	case "AddItem", "AddAccount", "ApplyTransaction", "UpdateMarketPrice":
 		if !argOk {
 			return CreateRespPkt(pkt.UUID, -204, nil, ErrReqHasNoArg, ErrCurrDbNil.Error())
 		}
@@ -158,11 +160,23 @@ func (p *ServerProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Pa
 		if err != nil {
 			return CreateRespPktErrUnmarshall(pkt.UUID, err)
 		}
-		invPrice := ToInvPrice(&price)
-		entityUUIDBytes, err := inventory.UpdateMarketPrice(inventory.CurrDB, invPrice)
+		invPrice := ToInvMarketPrice(&price)
+		err = inventory.UpdateMarketPrice(inventory.CurrDB, invPrice)
 		if err != nil {
 			return CreateRespPktErrExecFunc(pkt.UUID, err)
 		}
+	case "PrintBalances":
+		str, err := inventory.SprintBalances(inventory.CurrDB)
+		if err != nil {
+			return CreateRespPktErrExecFunc(pkt.UUID, err)
+		}
+		payload["balances"] = []byte(str)
+	case "PrintMarketBalances":
+		str, err := inventory.SprintMarketBalances(inventory.CurrDB)
+		if err != nil {
+			return CreateRespPktErrExecFunc(pkt.UUID, err)
+		}
+		payload["balances"] = []byte(str)
 	}
 
 	return CreateRespPkt(pkt.UUID, 0, payload, nil, "ok")

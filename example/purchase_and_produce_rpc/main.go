@@ -90,15 +90,15 @@ func sendGetMainAccountsReq() error {
 	return nil
 }
 
-func sendCreateAccountReq(name string, parentUUID []byte) ([]byte, uuid.UUID, error) {
+func sendCreateAccountReq(name string, parentUUIDBytes []byte) ([]byte, uuid.UUID, error) {
 	var parent *inventory.Account
-	if parentUUID != nil {
-		UUIDBytes, err := uuid.FromBytes(parentUUID)
+	if parentUUIDBytes != nil {
+		parentUUID, err := uuid.FromBytes(parentUUIDBytes)
 		if err == nil {
 			return nil, uuid.UUID{}, err
 		}
 		parent = &inventory.Account{
-			UUID: UUIDBytes,
+			UUID: parentUUID,
 		}
 	} else {
 		parent = nil
@@ -137,7 +137,7 @@ func sendCreateItemReq(item *inventory.Item) ([]byte, uuid.UUID, error) {
 }
 
 func sendApplyTransactionReq(transaction *inventory.Transaction) ([]byte, uuid.UUID, error) {
-	responsePkt, err := sendReqAndWaitResponse("ApplyTransaction", inventorypb.NewTransaction(*transaction))
+	responsePkt, err := sendReqAndWaitResponse("ApplyTransaction", inventorypb.NewTransaction(transaction))
 	if err != nil {
 		return nil, uuid.UUID{}, err
 	}
@@ -322,44 +322,33 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// todo: refactor these
-	// fmt.Println("update market price")
+	fmt.Println("update market price")
 
-	// // Market prices
-	// err = inventory.UpdateMarketPrice(db, &inventory.MarketPrices{
-	// 	Item: &inventory.Item{
-	// 		UUID: steelItem.UUID,
-	// 	},
-	// 	Price:    6,
-	// 	Currency: "USD",
-	// 	Unit:     "kg",
-	// }) // steel now 6 USD/kg
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	// Market prices
+	_, err = sendReqAndWaitResponse("UpdateMarketPrice", inventorypb.NewMarketPrice(&inventory.MarketPrice{
+		Item: &inventory.Item{
+			UUID: steelItem,
+		},
+		Price:    6,
+		Currency: "USD",
+		Unit:     "kg",
+	})) // steel now 6 USD/kg
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// // Market prices
-	// err = inventory.UpdateMarketPrice(db, &inventory.MarketPrices{
-	// 	Item: &inventory.Item{
-	// 		UUID: steelItem.UUID,
-	// 	},
-	// 	Price:    6,
-	// 	Currency: "USD",
-	// 	Unit:     "kg",
-	// }) // steel now 6 USD/kg
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	var responsePkt *inventoryrpc.Packet
+	fmt.Println("=== Historical Cost Balances (Leaf Accounts) ===")
+	responsePkt, err = sendReqAndWaitResponse("PrintBalances", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Print(string(responsePkt.Body["balances"]))
 
-	// fmt.Println("=== Historical Cost Balances (Leaf Accounts) ===")
-	// err = inventory.PrintBalances(db)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// fmt.Println("\n=== Market Value Balances (Leaf Accounts) ===")
-	// err = inventory.PrintMarketBalances(db)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	fmt.Println("\n=== Market Value Balances (Leaf Accounts) ===")
+	responsePkt, err = sendReqAndWaitResponse("PrintMarketBalances", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Print(string(responsePkt.Body["balances"]))
 }

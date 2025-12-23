@@ -91,14 +91,14 @@ type UnitConversions struct {
 	DatetimeMs int64
 }
 
-type CurrencyConversions struct {
+type CurrencyConversion struct {
 	FromCurrency string
 	ToCurrency   string
 	Rate         float64
 	DatetimeMs   int64
 }
 
-type MarketPrices struct {
+type MarketPrice struct {
 	ID         int
 	Item       *Item
 	DatetimeMs int64
@@ -136,21 +136,22 @@ func RollupBalances(balances []BalanceHistory, paths map[int][]string) map[strin
 	return result
 }
 
-func PrintBalances(db *sql.DB) error {
+func SprintBalances(db *sql.DB) (string, error) {
+	outStr := ""
 	// fmt.Println("building account tree")
 	paths, accMap, err := BuildAccountTree(db)
 	if err != nil {
-		return err
+		return outStr, err
 	}
 	// fmt.Println("fetching leaf balances")
 	leaf, err := FetchLeafBalances(db, accMap)
 	if err != nil {
-		return err
+		return outStr, err
 	}
 	// fmt.Println("rolling up balances")
 	rolled := RollupBalances(leaf, paths)
 
-	fmt.Println("=== Historical Cost Balances ===")
+	outStr += fmt.Sprintln("=== Historical Cost Balances ===")
 	keys := make([]string, 0)
 	for k := range rolled {
 		keys = append(keys, k)
@@ -170,30 +171,43 @@ func PrintBalances(db *sql.DB) error {
 			normQty = b.Quantity
 			normVal = b.Value
 		}
-		fmt.Printf("%s | Qty %.2f | Value %.2f | as of %v\n", k, normQty, normVal, time.UnixMilli(b.DatetimeMs))
+		outStr += fmt.Sprintf("%s | Qty %.2f | Value %.2f | as of %v\n", k, normQty, normVal, time.UnixMilli(b.DatetimeMs))
 	}
-	return nil
+	return outStr, nil
 }
 
-func PrintMarketBalances(db *sql.DB) error {
+func PrintBalances(db *sql.DB) error {
+	str, err := SprintBalances(db)
+	fmt.Print(str)
+	return err
+}
+
+func SprintMarketBalances(db *sql.DB) (string, error) {
 	// fmt.Println("building account tree")
+	outStr := ""
 	paths, accMap, err := BuildAccountTree(db)
 	if err != nil {
-		return err
+		return outStr, err
 	}
 	// fmt.Println("fetching leaf balances")
 	leaf, err := FetchLeafBalances(db, accMap)
 	if err != nil {
-		return err
+		return outStr, err
 	}
 	// fmt.Println("rolling up balances")
 	rolled := RollupBalances(leaf, paths)
 
-	fmt.Println("\n=== Market Value Balances ===")
+	outStr += fmt.Sprintln("\n=== Market Value Balances ===")
 	for k, b := range rolled {
-		fmt.Printf("%s | Qty %.2f | MarketValue %.2f %s\n",
+		outStr += fmt.Sprintf("%s | Qty %.2f | MarketValue %.2f %s\n",
 			k, b.Quantity, b.MarketValue, b.Currency)
 	}
 
-	return nil
+	return outStr, nil
+}
+
+func PrintMarketBalances(db *sql.DB) error {
+	str, err := SprintMarketBalances(db)
+	fmt.Print(str)
+	return err
 }
