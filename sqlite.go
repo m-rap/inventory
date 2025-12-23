@@ -77,6 +77,27 @@ func OpenOrCreateDB(dbUUID uuid.UUID) (*sql.DB, error) {
 	return db, nil
 }
 
+func GetCurrDBUUID() (*sql.DB, uuid.UUID) {
+	var resDbUUID uuid.UUID
+	var resDb *sql.DB = nil
+	for dbUUID, db := range DBMap {
+		if db == CurrDB {
+			resDbUUID = dbUUID
+			resDb = db
+		}
+	}
+	return resDb, resDbUUID
+}
+
+func CloseCurrDB() error {
+	db, dbUUID := GetCurrDBUUID()
+	if db == nil {
+		return nil
+	}
+	delete(DBMap, dbUUID)
+	return db.Close()
+}
+
 func LoadDBMap() error {
 	files, err := os.ReadDir(Prefix)
 	if err != nil {

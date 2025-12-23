@@ -376,4 +376,9 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Print(string(responsePkt.Body["balances"]))
+
+	_, err = sendReqAndWaitResponse("CloseCurrDB", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

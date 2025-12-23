@@ -18,6 +18,7 @@ var ServerFuncs = []string{
 	"UpdateMarketPrice",
 	"PrintBalances",
 	"PrintMarketBalances",
+	"CloseCurrDB",
 }
 
 func StrsContains(strs []string, searchVal string) bool {
@@ -60,7 +61,7 @@ func (p *ServerProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Pa
 
 	// layer 1, check curr db
 	switch funcStr {
-	case "GetCurrDB", "AddItem", "AddAccount", "ApplyTransaction", "GetMainAccounts", "UpdateMarketPrice", "PrintBalances", "PrintMarketBalances":
+	case "GetCurrDB", "AddItem", "AddAccount", "ApplyTransaction", "GetMainAccounts", "UpdateMarketPrice", "PrintBalances", "PrintMarketBalances", "CloseCurrDB":
 		if inventory.CurrDB == nil {
 			return CreateRespPkt(pkt.UUID, -203, nil, ErrCurrDbNil, ErrCurrDbNil.Error())
 		}
@@ -82,16 +83,11 @@ func (p *ServerProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Pa
 		if err != nil {
 			return CreateRespPktErrExecFunc(pkt.UUID, err)
 		}
-		var dbUUIDBytes []byte = nil
-		for elDbUUID, db := range inventory.DBMap {
-			if db == inventory.CurrDB {
-				dbUUIDBytes = elDbUUID[:]
-				payload["uuid"] = dbUUIDBytes
-			}
-		}
-		if dbUUIDBytes == nil {
+		_, dbUUIDBytes := inventory.GetCurrDBUUID()
+		if dbUUIDBytes == uuid.Nil {
 			return CreateRespPktErrExecFunc(pkt.UUID, ErrCurrDbNotRegistered)
 		}
+		payload["uuid"] = dbUUIDBytes[:]
 	case "OpenOrCreateDB":
 		var dbUUID uuid.UUID
 		if argOk {
@@ -180,6 +176,11 @@ func (p *ServerProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Pa
 			return CreateRespPktErrExecFunc(pkt.UUID, err)
 		}
 		payload["balances"] = []byte(str)
+	case "CloseCurrDB":
+		err = inventory.CloseCurrDB()
+		if err != nil {
+			return CreateRespPktErrExecFunc(pkt.UUID, err)
+		}
 	}
 
 	return CreateRespPkt(pkt.UUID, 0, payload, nil, "ok")
