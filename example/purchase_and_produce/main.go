@@ -141,8 +141,16 @@ func main() {
 		Description: "Owner Investment",
 		DatetimeMs:  time.Date(2025, 9, 1, 0, 0, 0, 0, time.Local).UnixMilli(),
 		TransactionLines: []*inventory.TransactionLine{
-			inventory.CreateFinancialTrLine(inventory.EquityAcc, 0, 1000, "USD"), // suntik modal
-			inventory.CreateFinancialTrLine(cashAcc, 1000, 0, "USD"),             // masuk cash
+			inventory.CreateFinancialTrLine(
+				inventory.EquityAcc,
+				0,
+				inventory.NewDecimalFromIntFrac(1000, 0).Data,
+				"USD"), // suntik modal
+			inventory.CreateFinancialTrLine(
+				cashAcc,
+				inventory.NewDecimalFromIntFrac(1000, 0).Data,
+				0,
+				"USD"), // masuk cash
 		},
 	})
 	if err != nil {
@@ -158,10 +166,30 @@ func main() {
 		Description: "Purchase Steel 100kg",
 		DatetimeMs:  time.Date(2025, 9, 2, 0, 0, 0, 0, time.Local).UnixMilli(),
 		TransactionLines: []*inventory.TransactionLine{
-			inventory.CreateInventoryTrLine(incomingMatAcc, steelItem, -100, "kg", steelPrice, "USD"), // incoming material
-			inventory.CreateInventoryTrLine(rawMaterialAcc, steelItem, 100, "kg", steelPrice, "USD"),  // added to raw material inventory
-			inventory.CreateFinancialTrLine(cashAcc, 0, 500, "USD"),                                   // Cash decreases
-			inventory.CreateFinancialTrLine(matPurchaseAcc, 500, 0, "USD"),                            // Expense recognized
+			inventory.CreateInventoryTrLine(
+				incomingMatAcc,
+				steelItem,
+				inventory.NewDecimalFromIntFrac(-100, 0).Data,
+				"kg",
+				inventory.NewDecimalFromFloat(steelPrice).Data,
+				"USD"), // incoming material
+			inventory.CreateInventoryTrLine(
+				rawMaterialAcc,
+				steelItem,
+				inventory.NewDecimalFromIntFrac(100, 0).Data,
+				"kg",
+				inventory.NewDecimalFromFloat(steelPrice).Data,
+				"USD"), // added to raw material inventory
+			inventory.CreateFinancialTrLine(
+				cashAcc,
+				0,
+				inventory.NewDecimalFromIntFrac(500, 0).Data,
+				"USD"), // Cash decreases
+			inventory.CreateFinancialTrLine(
+				matPurchaseAcc,
+				inventory.NewDecimalFromIntFrac(500, 0).Data,
+				0,
+				"USD"), // Expense recognized
 		},
 	})
 	if err != nil {
@@ -173,10 +201,30 @@ func main() {
 		Description: "Purchase Wood 100kg",
 		DatetimeMs:  time.Date(2025, 9, 3, 0, 0, 0, 0, time.Local).UnixMilli(),
 		TransactionLines: []*inventory.TransactionLine{
-			inventory.CreateInventoryTrLine(incomingMatAcc, woodItem, -150, "kg", woodPrice, "USD"), // incoming material
-			inventory.CreateInventoryTrLine(rawMaterialAcc, woodItem, 150, "kg", woodPrice, "USD"),  // added to raw material inventory
-			inventory.CreateFinancialTrLine(cashAcc, 0, 300, "USD"),                                 // Cash decreases
-			inventory.CreateFinancialTrLine(matPurchaseAcc, 300, 0, "USD"),                          // Expense recognized
+			inventory.CreateInventoryTrLine(
+				incomingMatAcc,
+				woodItem,
+				inventory.NewDecimalFromIntFrac(-150, 0).Data,
+				"kg",
+				inventory.NewDecimalFromFloat(woodPrice).Data,
+				"USD"), // incoming material
+			inventory.CreateInventoryTrLine(
+				rawMaterialAcc,
+				woodItem,
+				inventory.NewDecimalFromIntFrac(150, 0).Data,
+				"kg",
+				inventory.NewDecimalFromFloat(woodPrice).Data,
+				"USD"), // added to raw material inventory
+			inventory.CreateFinancialTrLine(
+				cashAcc,
+				0,
+				inventory.NewDecimalFromIntFrac(300, 0).Data,
+				"USD"), // Cash decreases
+			inventory.CreateFinancialTrLine(
+				matPurchaseAcc,
+				inventory.NewDecimalFromIntFrac(300, 0).Data,
+				0,
+				"USD"), // Expense recognized
 		},
 	})
 	if err != nil {
@@ -187,8 +235,20 @@ func main() {
 		Description: "Use Steel to Manufacture Widgets",
 		DatetimeMs:  time.Date(2025, 9, 4, 0, 0, 0, 0, time.Local).UnixMilli(),
 		TransactionLines: []*inventory.TransactionLine{
-			inventory.CreateInventoryTrLine(rawMaterialAcc, steelItem, -steelNeeded, "kg", steelPrice, "USD"),   // raw material decreases
-			inventory.CreateInventoryTrLine(workInProgressAcc, steelItem, steelNeeded, "kg", steelPrice, "USD"), // wip increases
+			inventory.CreateInventoryTrLine(
+				rawMaterialAcc,
+				steelItem,
+				inventory.NewDecimalFromFloat(-steelNeeded).Data,
+				"kg",
+				inventory.NewDecimalFromFloat(steelPrice).Data,
+				"USD"), // raw material decreases
+			inventory.CreateInventoryTrLine(
+				workInProgressAcc,
+				steelItem,
+				inventory.NewDecimalFromFloat(steelNeeded).Data,
+				"kg",
+				inventory.NewDecimalFromFloat(steelPrice).Data,
+				"USD"), // wip increases
 		},
 	})
 	if err != nil {
@@ -200,8 +260,20 @@ func main() {
 		Description: "Complete Widgets",
 		DatetimeMs:  time.Date(2025, 9, 5, 0, 0, 0, 0, time.Local).UnixMilli(),
 		TransactionLines: []*inventory.TransactionLine{
-			inventory.CreateInventoryTrLine(workInProgressAcc, steelItem, -steelNeeded, "kg", steelPrice, "USD"),            // wip decreases
-			inventory.CreateInventoryTrLine(finishedProductAcc, steelItem, targetWidgetProduction, "kg", widgetCost, "USD"), // Finished Goods increases
+			inventory.CreateInventoryTrLine(
+				workInProgressAcc,
+				steelItem,
+				inventory.NewDecimalFromFloat(-steelNeeded).Data,
+				"kg",
+				inventory.NewDecimalFromFloat(steelPrice).Data,
+				"USD"), // wip decreases
+			inventory.CreateInventoryTrLine(
+				finishedProductAcc,
+				steelItem,
+				inventory.NewDecimalFromFloat(targetWidgetProduction).Data,
+				"kg",
+				inventory.NewDecimalFromFloat(widgetCost).Data,
+				"USD"), // Finished Goods increases
 		},
 	})
 	if err != nil {
@@ -215,7 +287,7 @@ func main() {
 		Item: &inventory.Item{
 			UUID: steelItem.UUID,
 		},
-		Price:    6,
+		Price:    inventory.NewDecimalFromIntFrac(6, 0).Data,
 		Currency: "USD",
 		Unit:     "kg",
 	}) // steel now 6 USD/kg
@@ -223,15 +295,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Market prices
-	err = inventory.UpdateMarketPrice(db, &inventory.MarketPrice{
-		Item: &inventory.Item{
-			UUID: steelItem.UUID,
-		},
-		Price:    6,
-		Currency: "USD",
-		Unit:     "kg",
-	}) // steel now 6 USD/kg
 	if err != nil {
 		log.Fatal(err)
 	}

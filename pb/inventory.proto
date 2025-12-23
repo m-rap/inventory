@@ -30,9 +30,9 @@ message TransactionLine {
 	bytes TransactionUUID = 2;
 	bytes AccountUUID = 3;
 	bytes ItemUUID = 4;
-	double Quantity = 5;
+	sint64 Quantity = 5;
 	string Unit = 6;
-	double Price = 7;
+	sint64 Price = 7;
 	string Currency = 8;
 	string Note = 9;
 }
@@ -49,35 +49,35 @@ message BalanceHistory {
 	repeated string Path = 2;
 	BalanceHistoryReferences references = 3;
 	bytes Unit = 4;
-	double Quantity = 5;
-	double AvgCost = 6;
-	double Value = 7;
+	sint64 Quantity = 5;
+	sint64 AvgCost = 6;
+	sint64 Value = 7;
 	sint64 DatetimeMs = 8;
-	double TransactionPrice = 9;
-	double MarketPrice = 10;
+	sint64 TransactionPrice = 9;
+	sint64 MarketPrice = 10;
 	string Currency = 11;
-	double MarketValue = 12;
+	sint64 MarketValue = 12;
 	string Description = 13;
 }
 
 message UnitConversions {
 	string FromUnit = 1;
 	string ToUnit = 2;
-	double Factor = 3;
+	sint64 Factor = 3;
 	sint64 DatetimeMs = 4;
 }
 
 message CurrencyConversions {
 	string FromCurrency = 1;
 	string ToCurrency = 2;
-	double Rate = 3;
+	sint64 Rate = 3;
 	sint64 DatetimeMs = 4;
 }
 
 message MarketPrice {
 	bytes ItemUUID = 1;
 	sint64 DatetimeMs = 2;
-	double Price = 3;
+	sint64 Price = 3;
 	string Unit = 4;
 	string Currency = 5;
 }

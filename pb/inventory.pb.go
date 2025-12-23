@@ -239,9 +239,9 @@ type TransactionLine struct {
 	TransactionUUID []byte                 `protobuf:"bytes,2,opt,name=TransactionUUID,proto3" json:"TransactionUUID,omitempty"`
 	AccountUUID     []byte                 `protobuf:"bytes,3,opt,name=AccountUUID,proto3" json:"AccountUUID,omitempty"`
 	ItemUUID        []byte                 `protobuf:"bytes,4,opt,name=ItemUUID,proto3" json:"ItemUUID,omitempty"`
-	Quantity        float64                `protobuf:"fixed64,5,opt,name=Quantity,proto3" json:"Quantity,omitempty"`
+	Quantity        int64                  `protobuf:"zigzag64,5,opt,name=Quantity,proto3" json:"Quantity,omitempty"`
 	Unit            string                 `protobuf:"bytes,6,opt,name=Unit,proto3" json:"Unit,omitempty"`
-	Price           float64                `protobuf:"fixed64,7,opt,name=Price,proto3" json:"Price,omitempty"`
+	Price           int64                  `protobuf:"zigzag64,7,opt,name=Price,proto3" json:"Price,omitempty"`
 	Currency        string                 `protobuf:"bytes,8,opt,name=Currency,proto3" json:"Currency,omitempty"`
 	Note            string                 `protobuf:"bytes,9,opt,name=Note,proto3" json:"Note,omitempty"`
 	unknownFields   protoimpl.UnknownFields
@@ -306,7 +306,7 @@ func (x *TransactionLine) GetItemUUID() []byte {
 	return nil
 }
 
-func (x *TransactionLine) GetQuantity() float64 {
+func (x *TransactionLine) GetQuantity() int64 {
 	if x != nil {
 		return x.Quantity
 	}
@@ -320,7 +320,7 @@ func (x *TransactionLine) GetUnit() string {
 	return ""
 }
 
-func (x *TransactionLine) GetPrice() float64 {
+func (x *TransactionLine) GetPrice() int64 {
 	if x != nil {
 		return x.Price
 	}
@@ -415,14 +415,14 @@ type BalanceHistory struct {
 	Path             []string                  `protobuf:"bytes,2,rep,name=Path,proto3" json:"Path,omitempty"`
 	References       *BalanceHistoryReferences `protobuf:"bytes,3,opt,name=references,proto3" json:"references,omitempty"`
 	Unit             []byte                    `protobuf:"bytes,4,opt,name=Unit,proto3" json:"Unit,omitempty"`
-	Quantity         float64                   `protobuf:"fixed64,5,opt,name=Quantity,proto3" json:"Quantity,omitempty"`
-	AvgCost          float64                   `protobuf:"fixed64,6,opt,name=AvgCost,proto3" json:"AvgCost,omitempty"`
-	Value            float64                   `protobuf:"fixed64,7,opt,name=Value,proto3" json:"Value,omitempty"`
+	Quantity         int64                     `protobuf:"zigzag64,5,opt,name=Quantity,proto3" json:"Quantity,omitempty"`
+	AvgCost          int64                     `protobuf:"zigzag64,6,opt,name=AvgCost,proto3" json:"AvgCost,omitempty"`
+	Value            int64                     `protobuf:"zigzag64,7,opt,name=Value,proto3" json:"Value,omitempty"`
 	DatetimeMs       int64                     `protobuf:"zigzag64,8,opt,name=DatetimeMs,proto3" json:"DatetimeMs,omitempty"`
-	TransactionPrice float64                   `protobuf:"fixed64,9,opt,name=TransactionPrice,proto3" json:"TransactionPrice,omitempty"`
-	MarketPrice      float64                   `protobuf:"fixed64,10,opt,name=MarketPrice,proto3" json:"MarketPrice,omitempty"`
+	TransactionPrice int64                     `protobuf:"zigzag64,9,opt,name=TransactionPrice,proto3" json:"TransactionPrice,omitempty"`
+	MarketPrice      int64                     `protobuf:"zigzag64,10,opt,name=MarketPrice,proto3" json:"MarketPrice,omitempty"`
 	Currency         string                    `protobuf:"bytes,11,opt,name=Currency,proto3" json:"Currency,omitempty"`
-	MarketValue      float64                   `protobuf:"fixed64,12,opt,name=MarketValue,proto3" json:"MarketValue,omitempty"`
+	MarketValue      int64                     `protobuf:"zigzag64,12,opt,name=MarketValue,proto3" json:"MarketValue,omitempty"`
 	Description      string                    `protobuf:"bytes,13,opt,name=Description,proto3" json:"Description,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -486,21 +486,21 @@ func (x *BalanceHistory) GetUnit() []byte {
 	return nil
 }
 
-func (x *BalanceHistory) GetQuantity() float64 {
+func (x *BalanceHistory) GetQuantity() int64 {
 	if x != nil {
 		return x.Quantity
 	}
 	return 0
 }
 
-func (x *BalanceHistory) GetAvgCost() float64 {
+func (x *BalanceHistory) GetAvgCost() int64 {
 	if x != nil {
 		return x.AvgCost
 	}
 	return 0
 }
 
-func (x *BalanceHistory) GetValue() float64 {
+func (x *BalanceHistory) GetValue() int64 {
 	if x != nil {
 		return x.Value
 	}
@@ -514,14 +514,14 @@ func (x *BalanceHistory) GetDatetimeMs() int64 {
 	return 0
 }
 
-func (x *BalanceHistory) GetTransactionPrice() float64 {
+func (x *BalanceHistory) GetTransactionPrice() int64 {
 	if x != nil {
 		return x.TransactionPrice
 	}
 	return 0
 }
 
-func (x *BalanceHistory) GetMarketPrice() float64 {
+func (x *BalanceHistory) GetMarketPrice() int64 {
 	if x != nil {
 		return x.MarketPrice
 	}
@@ -535,7 +535,7 @@ func (x *BalanceHistory) GetCurrency() string {
 	return ""
 }
 
-func (x *BalanceHistory) GetMarketValue() float64 {
+func (x *BalanceHistory) GetMarketValue() int64 {
 	if x != nil {
 		return x.MarketValue
 	}
@@ -553,7 +553,7 @@ type UnitConversions struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	FromUnit      string                 `protobuf:"bytes,1,opt,name=FromUnit,proto3" json:"FromUnit,omitempty"`
 	ToUnit        string                 `protobuf:"bytes,2,opt,name=ToUnit,proto3" json:"ToUnit,omitempty"`
-	Factor        float64                `protobuf:"fixed64,3,opt,name=Factor,proto3" json:"Factor,omitempty"`
+	Factor        int64                  `protobuf:"zigzag64,3,opt,name=Factor,proto3" json:"Factor,omitempty"`
 	DatetimeMs    int64                  `protobuf:"zigzag64,4,opt,name=DatetimeMs,proto3" json:"DatetimeMs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -603,7 +603,7 @@ func (x *UnitConversions) GetToUnit() string {
 	return ""
 }
 
-func (x *UnitConversions) GetFactor() float64 {
+func (x *UnitConversions) GetFactor() int64 {
 	if x != nil {
 		return x.Factor
 	}
@@ -621,7 +621,7 @@ type CurrencyConversions struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	FromCurrency  string                 `protobuf:"bytes,1,opt,name=FromCurrency,proto3" json:"FromCurrency,omitempty"`
 	ToCurrency    string                 `protobuf:"bytes,2,opt,name=ToCurrency,proto3" json:"ToCurrency,omitempty"`
-	Rate          float64                `protobuf:"fixed64,3,opt,name=Rate,proto3" json:"Rate,omitempty"`
+	Rate          int64                  `protobuf:"zigzag64,3,opt,name=Rate,proto3" json:"Rate,omitempty"`
 	DatetimeMs    int64                  `protobuf:"zigzag64,4,opt,name=DatetimeMs,proto3" json:"DatetimeMs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -671,7 +671,7 @@ func (x *CurrencyConversions) GetToCurrency() string {
 	return ""
 }
 
-func (x *CurrencyConversions) GetRate() float64 {
+func (x *CurrencyConversions) GetRate() int64 {
 	if x != nil {
 		return x.Rate
 	}
@@ -689,7 +689,7 @@ type MarketPrice struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ItemUUID      []byte                 `protobuf:"bytes,1,opt,name=ItemUUID,proto3" json:"ItemUUID,omitempty"`
 	DatetimeMs    int64                  `protobuf:"zigzag64,2,opt,name=DatetimeMs,proto3" json:"DatetimeMs,omitempty"`
-	Price         float64                `protobuf:"fixed64,3,opt,name=Price,proto3" json:"Price,omitempty"`
+	Price         int64                  `protobuf:"zigzag64,3,opt,name=Price,proto3" json:"Price,omitempty"`
 	Unit          string                 `protobuf:"bytes,4,opt,name=Unit,proto3" json:"Unit,omitempty"`
 	Currency      string                 `protobuf:"bytes,5,opt,name=Currency,proto3" json:"Currency,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -740,7 +740,7 @@ func (x *MarketPrice) GetDatetimeMs() int64 {
 	return 0
 }
 
-func (x *MarketPrice) GetPrice() float64 {
+func (x *MarketPrice) GetPrice() int64 {
 	if x != nil {
 		return x.Price
 	}
@@ -903,9 +903,9 @@ const file_inventory_proto_rawDesc = "" +
 	"\x0fTransactionUUID\x18\x02 \x01(\fR\x0fTransactionUUID\x12 \n" +
 	"\vAccountUUID\x18\x03 \x01(\fR\vAccountUUID\x12\x1a\n" +
 	"\bItemUUID\x18\x04 \x01(\fR\bItemUUID\x12\x1a\n" +
-	"\bQuantity\x18\x05 \x01(\x01R\bQuantity\x12\x12\n" +
+	"\bQuantity\x18\x05 \x01(\x12R\bQuantity\x12\x12\n" +
 	"\x04Unit\x18\x06 \x01(\tR\x04Unit\x12\x14\n" +
-	"\x05Price\x18\a \x01(\x01R\x05Price\x12\x1a\n" +
+	"\x05Price\x18\a \x01(\x12R\x05Price\x12\x1a\n" +
 	"\bCurrency\x18\b \x01(\tR\bCurrency\x12\x12\n" +
 	"\x04Note\x18\t \x01(\tR\x04Note\"\xb4\x01\n" +
 	"\x18BalanceHistoryReferences\x120\n" +
@@ -920,22 +920,22 @@ const file_inventory_proto_rawDesc = "" +
 	"references\x18\x03 \x01(\v2%.inventorypb.BalanceHistoryReferencesR\n" +
 	"references\x12\x12\n" +
 	"\x04Unit\x18\x04 \x01(\fR\x04Unit\x12\x1a\n" +
-	"\bQuantity\x18\x05 \x01(\x01R\bQuantity\x12\x18\n" +
-	"\aAvgCost\x18\x06 \x01(\x01R\aAvgCost\x12\x14\n" +
-	"\x05Value\x18\a \x01(\x01R\x05Value\x12\x1e\n" +
+	"\bQuantity\x18\x05 \x01(\x12R\bQuantity\x12\x18\n" +
+	"\aAvgCost\x18\x06 \x01(\x12R\aAvgCost\x12\x14\n" +
+	"\x05Value\x18\a \x01(\x12R\x05Value\x12\x1e\n" +
 	"\n" +
 	"DatetimeMs\x18\b \x01(\x12R\n" +
 	"DatetimeMs\x12*\n" +
-	"\x10TransactionPrice\x18\t \x01(\x01R\x10TransactionPrice\x12 \n" +
+	"\x10TransactionPrice\x18\t \x01(\x12R\x10TransactionPrice\x12 \n" +
 	"\vMarketPrice\x18\n" +
-	" \x01(\x01R\vMarketPrice\x12\x1a\n" +
+	" \x01(\x12R\vMarketPrice\x12\x1a\n" +
 	"\bCurrency\x18\v \x01(\tR\bCurrency\x12 \n" +
-	"\vMarketValue\x18\f \x01(\x01R\vMarketValue\x12 \n" +
+	"\vMarketValue\x18\f \x01(\x12R\vMarketValue\x12 \n" +
 	"\vDescription\x18\r \x01(\tR\vDescription\"}\n" +
 	"\x0fUnitConversions\x12\x1a\n" +
 	"\bFromUnit\x18\x01 \x01(\tR\bFromUnit\x12\x16\n" +
 	"\x06ToUnit\x18\x02 \x01(\tR\x06ToUnit\x12\x16\n" +
-	"\x06Factor\x18\x03 \x01(\x01R\x06Factor\x12\x1e\n" +
+	"\x06Factor\x18\x03 \x01(\x12R\x06Factor\x12\x1e\n" +
 	"\n" +
 	"DatetimeMs\x18\x04 \x01(\x12R\n" +
 	"DatetimeMs\"\x8d\x01\n" +
@@ -944,7 +944,7 @@ const file_inventory_proto_rawDesc = "" +
 	"\n" +
 	"ToCurrency\x18\x02 \x01(\tR\n" +
 	"ToCurrency\x12\x12\n" +
-	"\x04Rate\x18\x03 \x01(\x01R\x04Rate\x12\x1e\n" +
+	"\x04Rate\x18\x03 \x01(\x12R\x04Rate\x12\x1e\n" +
 	"\n" +
 	"DatetimeMs\x18\x04 \x01(\x12R\n" +
 	"DatetimeMs\"\x8f\x01\n" +
@@ -953,7 +953,7 @@ const file_inventory_proto_rawDesc = "" +
 	"\n" +
 	"DatetimeMs\x18\x02 \x01(\x12R\n" +
 	"DatetimeMs\x12\x14\n" +
-	"\x05Price\x18\x03 \x01(\x01R\x05Price\x12\x12\n" +
+	"\x05Price\x18\x03 \x01(\x12R\x05Price\x12\x12\n" +
 	"\x04Unit\x18\x04 \x01(\tR\x04Unit\x12\x1a\n" +
 	"\bCurrency\x18\x05 \x01(\tR\bCurrency\"\x88\x02\n" +
 	"\x06Packet\x12\x12\n" +

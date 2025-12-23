@@ -174,9 +174,9 @@ CREATE TABLE IF NOT EXISTS transaction_lines (
     transaction_id INTEGER NOT NULL,
     account_id INTEGER NOT NULL,
     item_id INTEGER,
-    quantity REAL,
+    quantity BIGINT,
     unit TEXT,
-    price REAL,
+    price BIGINT,
     currency TEXT,
     note TEXT,
     FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
@@ -190,27 +190,27 @@ CREATE TABLE IF NOT EXISTS balance_history (
 	transaction_id INTEGER NOT NULL,
     item_id INTEGER,
     unit TEXT,
-    quantity REAL,
-	total_cost REAL,
-    avg_cost REAL,
-    value REAL,
-    price REAL,
+    quantity BIGINT,
+	total_cost BIGINT,
+    avg_cost BIGINT,
+    value BIGINT,
+    price BIGINT,
     currency TEXT,
-    market_value REAL,
+    market_value BIGINT,
     description TEXT
 );
 
 CREATE TABLE IF NOT EXISTS unit_conversions (
     from_unit TEXT NOT NULL,
     to_unit TEXT NOT NULL,
-    factor REAL NOT NULL,
+    factor BIGINT NOT NULL,
     datetime_ms INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS currency_conversions (
     from_currency TEXT NOT NULL,
     to_currency TEXT NOT NULL,
-    rate REAL NOT NULL,
+    rate BIGINT NOT NULL,
     datetime_ms INTEGER NOT NULL
 );
 
@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS market_prices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id BLOB NOT NULL,
     datetime_ms INTEGER NOT NULL,
-    price REAL,
+    price BIGINT,
     unit TEXT,
     currency TEXT,
     FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
@@ -392,7 +392,7 @@ func AddItem(db *sql.DB, item *Item) ([]byte, error) {
 	return itUUID[:], err
 }
 
-func CreateInventoryTrLine(acc *Account, item *Item, qty float64, unit string, price float64, currency string) *TransactionLine {
+func CreateInventoryTrLine(acc *Account, item *Item, qty int64, unit string, price int64, currency string) *TransactionLine {
 	return &TransactionLine{
 		Account:  acc,
 		Item:     item,
@@ -403,7 +403,7 @@ func CreateInventoryTrLine(acc *Account, item *Item, qty float64, unit string, p
 	}
 }
 
-func CreateInventoryTrLineWithUUID(accUUID uuid.UUID, itemUUID uuid.UUID, qty float64, unit string, price float64, currency string) *TransactionLine {
+func CreateInventoryTrLineWithUUID(accUUID uuid.UUID, itemUUID uuid.UUID, qty int64, unit string, price int64, currency string) *TransactionLine {
 	acc := &Account{
 		UUID: accUUID,
 	}
@@ -413,7 +413,7 @@ func CreateInventoryTrLineWithUUID(accUUID uuid.UUID, itemUUID uuid.UUID, qty fl
 	return CreateInventoryTrLine(acc, item, qty, unit, price, currency)
 }
 
-func CreateFinancialTrLine(acc *Account, debet float64, kredit float64, currency string) *TransactionLine {
+func CreateFinancialTrLine(acc *Account, debet int64, kredit int64, currency string) *TransactionLine {
 	amount := debet - kredit
 	return &TransactionLine{
 		Account:  acc,
@@ -424,14 +424,14 @@ func CreateFinancialTrLine(acc *Account, debet float64, kredit float64, currency
 	}
 }
 
-func CreateFinancialTrLineWithUUID(accUUID uuid.UUID, debet float64, kredit float64, currency string) *TransactionLine {
+func CreateFinancialTrLineWithUUID(accUUID uuid.UUID, debet int64, kredit int64, currency string) *TransactionLine {
 	acc := &Account{
 		UUID: accUUID,
 	}
 	return CreateFinancialTrLine(acc, debet, kredit, currency)
 }
 
-func CreateFinancialTrLineWithAccUUIDBytes(accUUIDBytes []byte, debet float64, kredit float64, currency string) (*TransactionLine, error) {
+func CreateFinancialTrLineWithAccUUIDBytes(accUUIDBytes []byte, debet int64, kredit int64, currency string) (*TransactionLine, error) {
 	accUUID, err := uuid.FromBytes(accUUIDBytes)
 	if err != nil {
 		return nil, err
@@ -510,7 +510,7 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) ([]byte, error) {
 		}
 
 		// fmt.Println("finding prev qty and prev total")
-		var prevQty, prevTotal float64
+		var prevQty, prevTotal int64
 		err = tx.QueryRow(`
 			SELECT h.quantity, h.total_cost
 			FROM balance_history h
@@ -529,9 +529,9 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) ([]byte, error) {
 
 		newQty := prevQty + l.Quantity
 		newTotal := prevTotal + l.Quantity*l.Price
-		avgCost := 0.0
+		avgCost := NewDecimal(0)
 		if newQty != 0 {
-			avgCost = newTotal / newQty
+			avgCost = NewDecimalFromFloat(NewDecimal(newTotal).ToFloat() / NewDecimal(newQty).ToFloat())
 		}
 
 		// fmt.Printf("new qty %v new total %v new avg cost %v. inserting balance history.\n", newQty, newTotal, avgCost)
@@ -543,7 +543,7 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) ([]byte, error) {
 
 		_, err = tx.Exec(`INSERT INTO balance_history(uuid,item_id,account_id,transaction_id,quantity,total_cost,avg_cost)
 		                  VALUES(?,?,?,?,?,?,?)`,
-			histUUID[:], itemID, l.Account.ID, trID, newQty, newTotal, avgCost)
+			histUUID[:], itemID, l.Account.ID, trID, newQty, newTotal, avgCost.Data)
 		if err != nil {
 			tx.Rollback()
 			return nil, err
@@ -705,8 +705,8 @@ group by account_id,item_id;
 		var accID, lineID, trID int
 		var itemID sql.NullInt64
 		var date int64
-		var trPrice, qty, avgCost, value float64
-		var marketPrice, marketValue sql.NullFloat64
+		var trPrice, qty, avgCost, value int64
+		var marketPrice, marketValue sql.NullInt64
 		if err := rows.Scan(&accID, &lineID, &itemID, &itemName, &trID, &desc, &trPrice, &marketPrice, &qty, &unit, &avgCost, &value, &marketValue, &date); err != nil {
 			return nil, err
 		}
@@ -739,10 +739,10 @@ group by account_id,item_id;
 			}
 		}
 		if marketPrice.Valid {
-			h.MarketPrice = marketPrice.Float64
+			h.MarketPrice = marketPrice.Int64
 		}
 		if marketValue.Valid {
-			h.MarketValue = marketValue.Float64
+			h.MarketValue = marketValue.Int64
 		}
 		balances = append(balances, h)
 	}
