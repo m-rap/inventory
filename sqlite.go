@@ -392,7 +392,7 @@ func AddItem(db *sql.DB, item *Item) ([]byte, error) {
 	return itUUID[:], err
 }
 
-func CreateInventoryTrLine(acc *Account, item *Item, qty int64, unit string, price int64, currency string) *TransactionLine {
+func CreateInventoryTrLine(acc *Account, item *Item, qty Decimal, unit string, price Decimal, currency string) *TransactionLine {
 	return &TransactionLine{
 		Account:  acc,
 		Item:     item,
@@ -403,7 +403,7 @@ func CreateInventoryTrLine(acc *Account, item *Item, qty int64, unit string, pri
 	}
 }
 
-func CreateInventoryTrLineWithUUID(accUUID uuid.UUID, itemUUID uuid.UUID, qty int64, unit string, price int64, currency string) *TransactionLine {
+func CreateInventoryTrLineWithUUID(accUUID uuid.UUID, itemUUID uuid.UUID, qty Decimal, unit string, price Decimal, currency string) *TransactionLine {
 	acc := &Account{
 		UUID: accUUID,
 	}
@@ -413,8 +413,8 @@ func CreateInventoryTrLineWithUUID(accUUID uuid.UUID, itemUUID uuid.UUID, qty in
 	return CreateInventoryTrLine(acc, item, qty, unit, price, currency)
 }
 
-func CreateFinancialTrLine(acc *Account, debet int64, kredit int64, currency string) *TransactionLine {
-	amount := debet - kredit
+func CreateFinancialTrLine(acc *Account, debet Decimal, kredit Decimal, currency string) *TransactionLine {
+	amount := NewDecimal(debet.Data - kredit.Data)
 	return &TransactionLine{
 		Account:  acc,
 		Item:     nil,
@@ -424,14 +424,14 @@ func CreateFinancialTrLine(acc *Account, debet int64, kredit int64, currency str
 	}
 }
 
-func CreateFinancialTrLineWithUUID(accUUID uuid.UUID, debet int64, kredit int64, currency string) *TransactionLine {
+func CreateFinancialTrLineWithUUID(accUUID uuid.UUID, debet Decimal, kredit Decimal, currency string) *TransactionLine {
 	acc := &Account{
 		UUID: accUUID,
 	}
 	return CreateFinancialTrLine(acc, debet, kredit, currency)
 }
 
-func CreateFinancialTrLineWithAccUUIDBytes(accUUIDBytes []byte, debet int64, kredit int64, currency string) (*TransactionLine, error) {
+func CreateFinancialTrLineWithAccUUIDBytes(accUUIDBytes []byte, debet Decimal, kredit Decimal, currency string) (*TransactionLine, error) {
 	accUUID, err := uuid.FromBytes(accUUIDBytes)
 	if err != nil {
 		return nil, err
@@ -510,7 +510,8 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) ([]byte, error) {
 		}
 
 		// fmt.Println("finding prev qty and prev total")
-		var prevQty, prevTotal int64
+		prevQty := NewDecimal(0)
+		prevTotal := NewDecimal(0)
 		err = tx.QueryRow(`
 			SELECT h.quantity, h.total_cost
 			FROM balance_history h
@@ -521,17 +522,17 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) ([]byte, error) {
 			itemID, l.Account.ID, date.UnixMilli()).Scan(&prevQty, &prevTotal)
 
 		if err == sql.ErrNoRows {
-			prevQty, prevTotal = 0, 0
+			prevQty, prevTotal = NewDecimal(0), NewDecimal(0)
 		} else if err != nil {
 			tx.Rollback()
 			return nil, err
 		}
 
-		newQty := prevQty + l.Quantity
-		newTotal := prevTotal + l.Quantity*l.Price
+		newQty := NewDecimal(prevQty.Data + l.Quantity.Data)
+		newTotal := NewDecimal(prevTotal.Data + l.Quantity.Multiply(l.Price).Data)
 		avgCost := NewDecimal(0)
-		if newQty != 0 {
-			avgCost = NewDecimalFromFloat(NewDecimal(newTotal).ToFloat() / NewDecimal(newQty).ToFloat())
+		if newQty.Data != 0 {
+			avgCost = newTotal.Divide(newQty)
 		}
 
 		// fmt.Printf("new qty %v new total %v new avg cost %v. inserting balance history.\n", newQty, newTotal, avgCost)
@@ -705,7 +706,7 @@ group by account_id,item_id;
 		var accID, lineID, trID int
 		var itemID sql.NullInt64
 		var date int64
-		var trPrice, qty, avgCost, value int64
+		trPrice, qty, avgCost, value := NewDecimal(0), NewDecimal(0), NewDecimal(0), NewDecimal(0)
 		var marketPrice, marketValue sql.NullInt64
 		if err := rows.Scan(&accID, &lineID, &itemID, &itemName, &trID, &desc, &trPrice, &marketPrice, &qty, &unit, &avgCost, &value, &marketValue, &date); err != nil {
 			return nil, err
@@ -739,10 +740,10 @@ group by account_id,item_id;
 			}
 		}
 		if marketPrice.Valid {
-			h.MarketPrice = marketPrice.Int64
+			h.MarketPrice = NewDecimal(marketPrice.Int64)
 		}
 		if marketValue.Valid {
-			h.MarketValue = marketValue.Int64
+			h.MarketValue = NewDecimal(marketValue.Int64)
 		}
 		balances = append(balances, h)
 	}

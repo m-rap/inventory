@@ -3,9 +3,7 @@ package inventory
 import (
 	"database/sql"
 	"fmt"
-	"math"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -14,86 +12,6 @@ import (
 )
 
 // type HookFunc func(tx Transaction, inv *Account) error
-
-const DECIMALPRECISION = 10000
-
-type Decimal struct {
-	Precision uint32
-	Data      int64
-	Format    string
-}
-
-func NewDecimal(rawI64 int64) Decimal {
-	return Decimal{
-		Precision: DECIMALPRECISION,
-		Data:      rawI64,
-		Format:    fmt.Sprintf("%%d.%%%dd", DECIMALPRECISION/10),
-	}
-}
-
-func NewDecimalFromIntFrac(intPart, fracPartPrecModulo int64) Decimal {
-	if intPart >= 0 {
-		return NewDecimal(intPart*DECIMALPRECISION + fracPartPrecModulo)
-	} else {
-		return NewDecimal(intPart*DECIMALPRECISION - fracPartPrecModulo)
-	}
-}
-
-func NewDecimalFromFloat(fdata float64) Decimal {
-	return NewDecimal(int64(fdata * DECIMALPRECISION))
-}
-
-func NewDecimalFromStr(str string) Decimal {
-	var intPart int64
-	var fracPart int64
-	var fracStr string
-	strs := strings.Split(str, ".")
-	if len(strs) >= 1 {
-		iTmp, _ := strconv.Atoi(strs[0])
-		intPart = int64(iTmp)
-		if len(strs) > 1 {
-			fracStr = strs[1]
-		} else {
-			fracStr = "0"
-		}
-	}
-	frontZeroCount := 0
-	nonPaddedCount := 0
-	nonPaddedStr := ""
-	for _, c := range fracStr {
-		if nonPaddedCount == 0 {
-			if c == '0' {
-				frontZeroCount++
-			} else {
-				nonPaddedCount++
-				nonPaddedStr += string(c)
-			}
-		} else {
-			nonPaddedCount++
-		}
-	}
-	decPrecZeroDigitCount := DECIMALPRECISION / 10
-	// misal 0.02, zeroCount = 1, nonPaddedCount = 1. (2 * 10^2)/10000
-	// misal 0.0002, zeroCount = 3, nonPaddedCount = 1 -> (2 * 10^0)/10000
-	// misal 0.2, zeroCount = 0, nonPaddedCount = 1 -> (2 * 10^3)/10000
-	// misal 0.20, zeroCount = 0, nonPaddedCount = 2 -> (20 * 10^2)/10000
-	powFactor := decPrecZeroDigitCount - (frontZeroCount + nonPaddedCount)
-	nonPaddedInt, _ := strconv.Atoi(nonPaddedStr)
-	fracPart = int64(nonPaddedInt) * int64(math.Pow10(powFactor))
-	return NewDecimalFromIntFrac(intPart, fracPart)
-}
-
-func (d Decimal) ToFloat() float64 {
-	return float64(d.Data) / float64(d.Precision)
-}
-
-func (d Decimal) ToIntFrac() (int64, int64) {
-	return d.Data / DECIMALPRECISION, d.Data % DECIMALPRECISION
-}
-
-func (d Decimal) ToString() string {
-	return fmt.Sprintf(d.Format, d.Data/DECIMALPRECISION, d.Data%DECIMALPRECISION)
-}
 
 type Account struct {
 	ID     int
@@ -140,9 +58,9 @@ type TransactionLine struct {
 	Transaction *Transaction
 	Account     *Account
 	Item        *Item
-	Quantity    int64
+	Quantity    Decimal
 	Unit        string
-	Price       int64
+	Price       Decimal
 	Currency    string
 	Note        string
 }
@@ -153,30 +71,30 @@ type BalanceHistory struct {
 	Path             []string
 	TransactionLine  *TransactionLine
 	Unit             string
-	Quantity         int64
-	AvgCost          int64
-	Value            int64
+	Quantity         Decimal
+	AvgCost          Decimal
+	Value            Decimal
 	DatetimeMs       int64
 	Year             int
 	Month            uint8
-	TransactionPrice int64
-	MarketPrice      int64
+	TransactionPrice Decimal
+	MarketPrice      Decimal
 	Currency         string
-	MarketValue      int64
+	MarketValue      Decimal
 	Description      string
 }
 
 type UnitConversions struct {
 	FromUnit   string
 	ToUnit     string
-	Factor     int64
+	Factor     Decimal
 	DatetimeMs int64
 }
 
 type CurrencyConversion struct {
 	FromCurrency string
 	ToCurrency   string
-	Rate         float64
+	Rate         Decimal
 	DatetimeMs   int64
 }
 
@@ -184,7 +102,7 @@ type MarketPrice struct {
 	ID         int
 	Item       *Item
 	DatetimeMs int64
-	Price      int64
+	Price      Decimal
 	Unit       string
 	Currency   string
 }
@@ -204,9 +122,9 @@ func RollupBalances(balances []BalanceHistory, paths map[int][]string) map[strin
 			key := strings.Join(path[:i], " > ") + " " + itemName
 			agg := result[key]
 			agg.Path = path[:i]
-			agg.Quantity += b.Quantity
-			agg.Value += b.Value
-			agg.MarketValue += b.MarketValue
+			agg.Quantity.Data += b.Quantity.Data
+			agg.Value.Data += b.Value.Data
+			agg.MarketValue.Data += b.MarketValue.Data
 			agg.Currency = b.Currency
 			agg.DatetimeMs = b.DatetimeMs
 			agg.TransactionLine = b.TransactionLine
@@ -242,18 +160,19 @@ func SprintBalances(db *sql.DB) (string, error) {
 	for i := range keys {
 		k := keys[i]
 		b := rolled[k]
-		var normQty, normVal int64
+		normQty := NewDecimal(0)
+		normVal := NewDecimal(0)
 		if b.TransactionLine.Account != nil &&
 			(b.TransactionLine.Account.IsChildOfOrItself(LiabilityAcc) ||
 				b.TransactionLine.Account.IsChildOfOrItself(EquityAcc) ||
 				b.TransactionLine.Account.IsChildOfOrItself(IncomeAcc)) {
-			normQty = -b.Quantity
-			normVal = -b.Value
+			normQty.Data = -b.Quantity.Data
+			normVal.Data = -b.Value.Data
 		} else {
 			normQty = b.Quantity
 			normVal = b.Value
 		}
-		outStr += fmt.Sprintf("%s | Qty %.2f | Value %.2f | as of %v\n", k, NewDecimal(normQty).ToFloat(), NewDecimal(normVal).ToFloat(), time.UnixMilli(b.DatetimeMs))
+		outStr += fmt.Sprintf("%s | Qty %.2f | Value %.2f | as of %v\n", k, normQty.ToFloat(), normVal.ToFloat(), time.UnixMilli(b.DatetimeMs))
 	}
 	return outStr, nil
 }
@@ -282,7 +201,7 @@ func SprintMarketBalances(db *sql.DB) (string, error) {
 	outStr += fmt.Sprintln("\n=== Market Value Balances ===")
 	for k, b := range rolled {
 		outStr += fmt.Sprintf("%s | Qty %.2f | MarketValue %.2f %s\n",
-			k, NewDecimal(b.Quantity).ToFloat(), NewDecimal(b.MarketValue).ToFloat(), b.Currency)
+			k, b.Quantity.ToFloat(), b.MarketValue.ToFloat(), b.Currency)
 	}
 
 	return outStr, nil

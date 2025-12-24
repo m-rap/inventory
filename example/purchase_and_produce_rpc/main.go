@@ -282,13 +282,13 @@ func main() {
 		TransactionLines: []*inventory.TransactionLine{
 			inventory.CreateFinancialTrLineWithUUID(
 				mainAccountUUIDs["equity"],
-				0,
-				inventory.NewDecimalFromIntFrac(1000, 0).Data,
+				inventory.NewDecimal(0),
+				inventory.NewDecimalFromIntFrac(1000, 0),
 				"USD"), // suntik modal
 			inventory.CreateFinancialTrLineWithUUID(
 				cashAcc,
-				inventory.NewDecimalFromIntFrac(1000, 0).Data,
-				0,
+				inventory.NewDecimalFromIntFrac(1000, 0),
+				inventory.NewDecimal(0),
 				"USD"), // masuk cash
 		},
 	})
@@ -308,26 +308,26 @@ func main() {
 			inventory.CreateInventoryTrLineWithUUID(
 				incomingMatAcc,
 				steelItem,
-				inventory.NewDecimalFromIntFrac(-100, 0).Data,
+				inventory.NewDecimalFromIntFrac(-100, 0),
 				"kg",
-				inventory.NewDecimalFromFloat(steelPrice).Data,
+				inventory.NewDecimalFromFloat(steelPrice),
 				"USD"), // incoming material
 			inventory.CreateInventoryTrLineWithUUID(
 				rawMaterialAcc,
 				steelItem,
-				inventory.NewDecimalFromIntFrac(100, 0).Data,
+				inventory.NewDecimalFromIntFrac(100, 0),
 				"kg",
-				inventory.NewDecimalFromFloat(steelPrice).Data,
+				inventory.NewDecimalFromFloat(steelPrice),
 				"USD"), // added to raw material inventory
 			inventory.CreateFinancialTrLineWithUUID(
 				cashAcc,
-				0,
-				inventory.NewDecimalFromIntFrac(500, 0).Data,
+				inventory.NewDecimal(0),
+				inventory.NewDecimalFromIntFrac(500, 0),
 				"USD"), // Cash decreases
 			inventory.CreateFinancialTrLineWithUUID(
 				matPurchaseAcc,
-				inventory.NewDecimalFromIntFrac(500, 0).Data,
-				0,
+				inventory.NewDecimalFromIntFrac(500, 0),
+				inventory.NewDecimal(0),
 				"USD"), // Expense recognized
 		},
 	})
@@ -343,25 +343,25 @@ func main() {
 			inventory.CreateInventoryTrLineWithUUID(
 				incomingMatAcc,
 				woodItem,
-				inventory.NewDecimalFromIntFrac(-150, 0).Data,
+				inventory.NewDecimalFromIntFrac(-150, 0),
 				"kg",
-				inventory.NewDecimalFromFloat(woodPrice).Data,
+				inventory.NewDecimalFromFloat(woodPrice),
 				"USD"), // incoming material
 			inventory.CreateInventoryTrLineWithUUID(
 				rawMaterialAcc,
 				woodItem,
-				inventory.NewDecimalFromIntFrac(150, 0).Data,
+				inventory.NewDecimalFromIntFrac(150, 0),
 				"kg",
-				inventory.NewDecimalFromFloat(woodPrice).Data,
+				inventory.NewDecimalFromFloat(woodPrice),
 				"USD"), // added to raw material inventory
 			inventory.CreateFinancialTrLineWithUUID(
 				cashAcc,
-				0,
-				inventory.NewDecimalFromIntFrac(300, 0).Data,
+				inventory.NewDecimal(0),
+				inventory.NewDecimalFromIntFrac(300, 0),
 				"USD"), // Cash decreases
 			inventory.CreateFinancialTrLineWithUUID(matPurchaseAcc,
-				inventory.NewDecimalFromIntFrac(300, 0).Data,
-				0,
+				inventory.NewDecimalFromIntFrac(300, 0),
+				inventory.NewDecimal(0),
 				"USD"), // Expense recognized
 		},
 	})
@@ -376,16 +376,16 @@ func main() {
 			inventory.CreateInventoryTrLineWithUUID(
 				rawMaterialAcc,
 				steelItem,
-				inventory.NewDecimalFromFloat(-steelNeeded).Data,
+				inventory.NewDecimalFromFloat(-steelNeeded),
 				"kg",
-				inventory.NewDecimalFromFloat(steelPrice).Data,
+				inventory.NewDecimalFromFloat(steelPrice),
 				"USD"), // raw material decreases
 			inventory.CreateInventoryTrLineWithUUID(
 				workInProgressAcc,
 				steelItem,
-				inventory.NewDecimalFromFloat(steelNeeded).Data,
+				inventory.NewDecimalFromFloat(steelNeeded),
 				"kg",
-				inventory.NewDecimalFromFloat(steelPrice).Data,
+				inventory.NewDecimalFromFloat(steelPrice),
 				"USD"), // wip increases
 		},
 	})
@@ -401,16 +401,16 @@ func main() {
 			inventory.CreateInventoryTrLineWithUUID(
 				workInProgressAcc,
 				steelItem,
-				inventory.NewDecimalFromFloat(-steelNeeded).Data,
+				inventory.NewDecimalFromFloat(-steelNeeded),
 				"kg",
-				inventory.NewDecimalFromFloat(steelPrice).Data,
+				inventory.NewDecimalFromFloat(steelPrice),
 				"USD"), // wip decreases
 			inventory.CreateInventoryTrLineWithUUID(
 				finishedProductAcc,
 				steelItem,
-				inventory.NewDecimalFromFloat(targetWidgetProduction).Data,
+				inventory.NewDecimalFromFloat(targetWidgetProduction),
 				"kg",
-				inventory.NewDecimalFromFloat(widgetCost).Data,
+				inventory.NewDecimalFromFloat(widgetCost),
 				"USD"), // Finished Goods increases
 		},
 	})
@@ -425,7 +425,7 @@ func main() {
 		Item: &inventory.Item{
 			UUID: steelItem,
 		},
-		Price:    6,
+		Price:    inventory.NewDecimalFromIntFrac(6, 0),
 		Currency: "USD",
 		Unit:     "kg",
 	})) // steel now 6 USD/kg
