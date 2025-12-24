@@ -1,4 +1,4 @@
-package inventory
+package main
 
 import (
 	"database/sql/driver"
@@ -124,4 +124,30 @@ func (d Decimal) Divide(divisor Decimal) Decimal {
 func (d Decimal) Multiply(multiplicand Decimal) Decimal {
 	// d as multiplier
 	return NewDecimal((d.Data * multiplicand.Data) / int64(d.FracDivisor))
+}
+
+func test(intPart1 int64, fracPart1 int, intPart2 int64, fracPart2 int) {
+	a := NewDecimalFromIntFrac(intPart1, int64(fracPart1))
+	b := NewDecimalFromIntFrac(intPart2, int64(fracPart2))
+	fmt.Printf("format %s\n", a.Format)
+	fmt.Printf("a %d %s\n", a.Data, a.ToString())
+	fmt.Printf("b %d %s\n", b.Data, b.ToString())
+	c := a.Divide(b)
+	fmt.Println("a / b")
+	fmt.Printf("tofloat %f\n", c.ToFloat())
+	fmt.Printf("tostring %s\n", c.ToString())
+	c = a.Multiply(b)
+	fmt.Println("a * b")
+	fmt.Printf("tofloat %f\n", c.ToFloat())
+	fmt.Printf("tostring %s\n", c.ToString())
+	fmt.Println()
+}
+
+func main() {
+	fracDivisor := int(math.Pow10(DECIMALPRECISION))
+	test(10, 0, 4, 0)
+	test(-10, 0, 4, 0)
+	fmt.Printf("%f\n\n", -10.0/4.0)
+	test(4, int(0.5*float64(fracDivisor)), 2, 0)
+	test(-4, int(0.5*float64(fracDivisor)), 2, 0)
 }
