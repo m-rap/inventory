@@ -113,14 +113,27 @@ func RollupBalances(balances []BalanceHistory, paths map[int][]string) map[strin
 	for _, b := range balances {
 		path := paths[b.TransactionLine.Account.ID]
 		var itemName string
+		// var itemID int
 		if b.TransactionLine.Item != nil {
 			itemName = b.TransactionLine.Item.Name
+			// itemID = b.TransactionLine.Item.ID
+
 		} else {
 			itemName = ""
 		}
 		for i := 1; i <= len(path); i++ {
 			key := strings.Join(path[:i], " > ") + " " + itemName
-			agg := result[key]
+			agg, ok := result[key]
+			if !ok {
+				agg.Quantity = NewDecimal(0)
+				agg.Value = NewDecimal(0)
+				agg.MarketValue = NewDecimal(0)
+			}
+
+			// fmt.Printf("agg %s to tl %d acc %d it %d: qty %s+%s val %s+%s mval %s+%s\n", key, b.TransactionLine.ID, b.TransactionLine.Account.ID, itemID,
+			// 	agg.Quantity.ToString(), b.Quantity.ToString(),
+			// 	agg.Value.ToString(), b.Value.ToString(),
+			// 	agg.MarketValue.ToString(), b.MarketValue.ToString())
 			agg.Path = path[:i]
 			agg.Quantity.Data += b.Quantity.Data
 			agg.Value.Data += b.Value.Data

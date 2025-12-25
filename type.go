@@ -82,14 +82,23 @@ func NewDecimalFromStr(str string) Decimal {
 }
 
 func (d Decimal) ToFloat() float64 {
+	if d.FracDivisor == 0 {
+		return float64(d.Data)
+	}
 	return float64(d.Data) / float64(d.FracDivisor)
 }
 
 func (d Decimal) ToIntFrac() (int64, int64) {
+	if d.FracDivisor == 0 {
+		return d.Data, 0
+	}
 	return d.Data / int64(d.FracDivisor), d.Data % int64(d.FracDivisor)
 }
 
 func (d Decimal) ToString() string {
+	if d.FracDivisor == 0 {
+		return fmt.Sprintf("fz%d", d.Data)
+	}
 	frac := d.Data % int64(d.FracDivisor)
 	if frac < 0 {
 		frac *= -1

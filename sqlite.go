@@ -500,7 +500,7 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) ([]byte, error) {
 			}
 			*l.Account = *tmpAcc
 		}
-		// fmt.Println(lineUUID, trID, l.Account.ID, sql.NullInt64{Int64: int64(itemID), Valid: itemID != -1}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
+		// fmt.Println(trID, l.Account.ID, itemID, "qty", l.Quantity.ToString(), l.Unit, "pri", l.Price.ToString(), l.Currency, l.Note)
 		_, err = tx.Exec(
 			"INSERT INTO transaction_lines (uuid,transaction_id,account_id,item_id,quantity,unit,price,currency,note) VALUES(?,?,?,?,?,?,?,?,?)",
 			lineUUID[:], trID, l.Account.ID, sql.NullInt64{Int64: int64(itemID), Valid: itemID != -1}, l.Quantity, l.Unit, l.Price, l.Currency, l.Note)
@@ -535,7 +535,7 @@ func ApplyTransaction(db *sql.DB, transaction *Transaction) ([]byte, error) {
 			avgCost = newTotal.Divide(newQty)
 		}
 
-		// fmt.Printf("new qty %v new total %v new avg cost %v. inserting balance history.\n", newQty, newTotal, avgCost)
+		// fmt.Printf("prev qty tot %v %v new qty tot %v %v new avg cost %v\n", prevQty.ToString(), prevTotal.ToString(), newQty.ToString(), newTotal.ToString(), avgCost.ToString())
 		histUUID, err := uuid.NewV6()
 		if err != nil {
 			tx.Rollback()
@@ -706,15 +706,15 @@ group by account_id,item_id;
 		var accID, lineID, trID int
 		var itemID sql.NullInt64
 		var date int64
-		trPrice, qty, avgCost, value := NewDecimal(0), NewDecimal(0), NewDecimal(0), NewDecimal(0)
-		var marketPrice, marketValue sql.NullInt64
-		if err := rows.Scan(&accID, &lineID, &itemID, &itemName, &trID, &desc, &trPrice, &marketPrice, &qty, &unit, &avgCost, &value, &marketValue, &date); err != nil {
+		trPrice, qty, avgCost, value, marketPrice, marketValue := NewDecimal(0), NewDecimal(0), NewDecimal(0), NewDecimal(0), NewDecimal(0), NewDecimal(0)
+		var marketPriceNull, marketValueNull sql.NullInt64
+		if err := rows.Scan(&accID, &lineID, &itemID, &itemName, &trID, &desc, &trPrice, &marketPriceNull, &qty, &unit, &avgCost, &value, &marketValueNull, &date); err != nil {
 			return nil, err
 		}
 		acc, ok := accountMap[accID]
 		if !ok {
 			acc = nil
-			fmt.Printf("uuid %v not found on map\n", accID)
+			fmt.Printf("acc id %v not found on map\n", accID)
 		}
 		h := BalanceHistory{
 			TransactionLine: &TransactionLine{
@@ -739,12 +739,20 @@ group by account_id,item_id;
 				Name: itemName.String,
 			}
 		}
-		if marketPrice.Valid {
-			h.MarketPrice = NewDecimal(marketPrice.Int64)
+
+		// todo: tidy this. drop sql multiply result, the redo multiplication
+		h.Value = qty.Multiply(avgCost)
+
+		if marketPriceNull.Valid {
+			marketPrice = NewDecimal(marketPriceNull.Int64)
+			marketValue = qty.Multiply(marketPrice)
+			h.MarketPrice = marketPrice
+			h.MarketValue = marketValue
 		}
-		if marketValue.Valid {
-			h.MarketValue = NewDecimal(marketValue.Int64)
+		if marketValueNull.Valid {
+			// 	h.MarketValue = NewDecimal(marketValue.Int64)
 		}
+		// fmt.Println(accID, trID, "qty", qty.ToString(), "pri", trPrice.ToString(), "val", h.Value.ToString(), "mpri", marketPrice.ToString(), "mval", marketValue.ToString())
 		balances = append(balances, h)
 	}
 	return balances, nil
