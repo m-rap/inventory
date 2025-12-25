@@ -58,9 +58,9 @@ type TransactionLine struct {
 	Transaction *Transaction
 	Account     *Account
 	Item        *Item
-	Quantity    float64
+	Quantity    Decimal
 	Unit        string
-	Price       float64
+	Price       Decimal
 	Currency    string
 	Note        string
 }
@@ -71,30 +71,30 @@ type BalanceHistory struct {
 	Path             []string
 	TransactionLine  *TransactionLine
 	Unit             string
-	Quantity         float64
-	AvgCost          float64
-	Value            float64
+	Quantity         Decimal
+	AvgCost          Decimal
+	Value            Decimal
 	DatetimeMs       int64
 	Year             int
 	Month            uint8
-	TransactionPrice float64
-	MarketPrice      float64
+	TransactionPrice Decimal
+	MarketPrice      Decimal
 	Currency         string
-	MarketValue      float64
+	MarketValue      Decimal
 	Description      string
 }
 
 type UnitConversions struct {
 	FromUnit   string
 	ToUnit     string
-	Factor     float64
+	Factor     Decimal
 	DatetimeMs int64
 }
 
 type CurrencyConversion struct {
 	FromCurrency string
 	ToCurrency   string
-	Rate         float64
+	Rate         Decimal
 	DatetimeMs   int64
 }
 
@@ -102,7 +102,7 @@ type MarketPrice struct {
 	ID         int
 	Item       *Item
 	DatetimeMs int64
-	Price      float64
+	Price      Decimal
 	Unit       string
 	Currency   string
 }
@@ -113,18 +113,31 @@ func RollupBalances(balances []BalanceHistory, paths map[int][]string) map[strin
 	for _, b := range balances {
 		path := paths[b.TransactionLine.Account.ID]
 		var itemName string
+		// var itemID int
 		if b.TransactionLine.Item != nil {
 			itemName = b.TransactionLine.Item.Name
+			// itemID = b.TransactionLine.Item.ID
+
 		} else {
 			itemName = ""
 		}
 		for i := 1; i <= len(path); i++ {
 			key := strings.Join(path[:i], " > ") + " " + itemName
-			agg := result[key]
+			agg, ok := result[key]
+			if !ok {
+				agg.Quantity = NewDecimal(0)
+				agg.Value = NewDecimal(0)
+				agg.MarketValue = NewDecimal(0)
+			}
+
+			// fmt.Printf("agg %s to tl %d acc %d it %d: qty %s+%s val %s+%s mval %s+%s\n", key, b.TransactionLine.ID, b.TransactionLine.Account.ID, itemID,
+			// 	agg.Quantity.ToString(), b.Quantity.ToString(),
+			// 	agg.Value.ToString(), b.Value.ToString(),
+			// 	agg.MarketValue.ToString(), b.MarketValue.ToString())
 			agg.Path = path[:i]
-			agg.Quantity += b.Quantity
-			agg.Value += b.Value
-			agg.MarketValue += b.MarketValue
+			agg.Quantity.Data += b.Quantity.Data
+			agg.Value.Data += b.Value.Data
+			agg.MarketValue.Data += b.MarketValue.Data
 			agg.Currency = b.Currency
 			agg.DatetimeMs = b.DatetimeMs
 			agg.TransactionLine = b.TransactionLine
@@ -160,18 +173,19 @@ func SprintBalances(db *sql.DB) (string, error) {
 	for i := range keys {
 		k := keys[i]
 		b := rolled[k]
-		var normQty, normVal float64
+		normQty := NewDecimal(0)
+		normVal := NewDecimal(0)
 		if b.TransactionLine.Account != nil &&
 			(b.TransactionLine.Account.IsChildOfOrItself(LiabilityAcc) ||
 				b.TransactionLine.Account.IsChildOfOrItself(EquityAcc) ||
 				b.TransactionLine.Account.IsChildOfOrItself(IncomeAcc)) {
-			normQty = -b.Quantity
-			normVal = -b.Value
+			normQty.Data = -b.Quantity.Data
+			normVal.Data = -b.Value.Data
 		} else {
 			normQty = b.Quantity
 			normVal = b.Value
 		}
-		outStr += fmt.Sprintf("%s | Qty %.2f | Value %.2f | as of %v\n", k, normQty, normVal, time.UnixMilli(b.DatetimeMs))
+		outStr += fmt.Sprintf("%s | Qty %.2f | Value %.2f | as of %v\n", k, normQty.ToFloat(), normVal.ToFloat(), time.UnixMilli(b.DatetimeMs))
 	}
 	return outStr, nil
 }
@@ -207,7 +221,7 @@ func SprintMarketBalances(db *sql.DB) (string, error) {
 		k := keys[i]
 		b := rolled[k]
 		outStr += fmt.Sprintf("%s | Qty %.2f | MarketValue %.2f %s\n",
-			k, b.Quantity, b.MarketValue, b.Currency)
+			k, b.Quantity.ToFloat(), b.MarketValue.ToFloat(), b.Currency)
 	}
 
 	return outStr, nil

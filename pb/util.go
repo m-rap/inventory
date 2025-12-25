@@ -31,9 +31,9 @@ func ToInvPacket(pkt *Packet) *inventoryrpc.Packet {
 func NewTransactionLine(transactionLine *inventory.TransactionLine) *TransactionLine {
 	trLine := &TransactionLine{
 		UUID:     transactionLine.UUID[:],
-		Quantity: transactionLine.Quantity,
+		Quantity: transactionLine.Quantity.Data,
 		Unit:     transactionLine.Unit,
-		Price:    transactionLine.Price,
+		Price:    transactionLine.Price.Data,
 		Currency: transactionLine.Currency,
 		Note:     transactionLine.Note,
 	}
@@ -148,9 +148,9 @@ func ToInvTransaction(tr *Transaction) *inventory.Transaction {
 			},
 			Account:  acc,
 			Item:     item,
-			Quantity: trl.Quantity,
+			Quantity: inventory.NewDecimal(trl.Quantity),
 			Unit:     trl.Unit,
-			Price:    trl.Price,
+			Price:    inventory.NewDecimal(trl.Price),
 			Currency: trl.Currency,
 			Note:     trl.Note,
 		})
@@ -173,7 +173,7 @@ func NewMarketPrice(p *inventory.MarketPrice) *MarketPrice {
 	return &MarketPrice{
 		ItemUUID:   itemUUID,
 		DatetimeMs: p.DatetimeMs,
-		Price:      p.Price,
+		Price:      p.Price.Data,
 		Unit:       p.Unit,
 		Currency:   p.Currency,
 	}
@@ -186,7 +186,7 @@ func ToInvMarketPrice(p *MarketPrice) *inventory.MarketPrice {
 			UUID: itemUUID,
 		},
 		DatetimeMs: p.DatetimeMs,
-		Price:      p.Price,
+		Price:      inventory.NewDecimal(p.Price),
 		Unit:       p.Unit,
 		Currency:   p.Currency,
 	}
