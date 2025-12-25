@@ -212,7 +212,14 @@ func SprintMarketBalances(db *sql.DB) (string, error) {
 	rolled := RollupBalances(leaf, paths)
 
 	outStr += fmt.Sprintln("\n=== Market Value Balances ===")
-	for k, b := range rolled {
+	keys := make([]string, 0)
+	for k := range rolled {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i := range keys {
+		k := keys[i]
+		b := rolled[k]
 		outStr += fmt.Sprintf("%s | Qty %.2f | MarketValue %.2f %s\n",
 			k, b.Quantity.ToFloat(), b.MarketValue.ToFloat(), b.Currency)
 	}

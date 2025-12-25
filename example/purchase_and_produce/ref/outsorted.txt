@@ -1,0 +1,47 @@
+removing inventory.db
+initialize sqlite
+init schema
+create accounts and items
+apply transactions
+update market price
+=== Historical Cost Balances (Leaf Accounts) ===
+=== Historical Cost Balances ===
+asset  | Qty 200.00 | Value 0.00 | as of 2025-09-03 00:00:00 +0000 UTC
+asset > cash  | Qty 200.00 | Value 0.00 | as of 2025-09-03 00:00:00 +0000 UTC
+asset > inventory > finished product steel | Qty 10.00 | Value 100.00 | as of 2025-09-05 00:00:00 +0000 UTC
+asset > inventory > raw material steel | Qty 80.00 | Value 400.00 | as of 2025-09-04 00:00:00 +0000 UTC
+asset > inventory > raw material wood | Qty 150.00 | Value 450.00 | as of 2025-09-03 00:00:00 +0000 UTC
+asset > inventory > work in progress steel | Qty 0.00 | Value 0.00 | as of 2025-09-05 00:00:00 +0000 UTC
+asset > inventory steel | Qty 90.00 | Value 500.00 | as of 2025-09-05 00:00:00 +0000 UTC
+asset > inventory wood | Qty 150.00 | Value 450.00 | as of 2025-09-03 00:00:00 +0000 UTC
+asset steel | Qty 90.00 | Value 500.00 | as of 2025-09-05 00:00:00 +0000 UTC
+asset wood | Qty 150.00 | Value 450.00 | as of 2025-09-03 00:00:00 +0000 UTC
+equity  | Qty 1000.00 | Value 0.00 | as of 2025-09-01 00:00:00 +0000 UTC
+expense  | Qty 800.00 | Value 0.00 | as of 2025-09-03 00:00:00 +0000 UTC
+expense > material purchase  | Qty 800.00 | Value 0.00 | as of 2025-09-03 00:00:00 +0000 UTC
+non-financial income > incoming material steel | Qty -100.00 | Value -500.00 | as of 2025-09-02 00:00:00 +0000 UTC
+non-financial income > incoming material wood | Qty -150.00 | Value -450.00 | as of 2025-09-03 00:00:00 +0000 UTC
+non-financial income steel | Qty -100.00 | Value -500.00 | as of 2025-09-02 00:00:00 +0000 UTC
+non-financial income wood | Qty -150.00 | Value -450.00 | as of 2025-09-03 00:00:00 +0000 UTC
+
+=== Market Value Balances (Leaf Accounts) ===
+
+=== Market Value Balances ===
+asset  | Qty 200.00 | MarketValue 0.00 
+asset > cash  | Qty 200.00 | MarketValue 0.00 
+asset > inventory > finished product steel | Qty 10.00 | MarketValue 60.00 
+asset > inventory > raw material steel | Qty 80.00 | MarketValue 480.00 
+asset > inventory > raw material wood | Qty 150.00 | MarketValue 0.00 
+asset > inventory > work in progress steel | Qty 0.00 | MarketValue 0.00 
+asset > inventory steel | Qty 90.00 | MarketValue 540.00 
+asset > inventory wood | Qty 150.00 | MarketValue 0.00 
+asset steel | Qty 90.00 | MarketValue 540.00 
+asset wood | Qty 150.00 | MarketValue 0.00 
+equity  | Qty -1000.00 | MarketValue 0.00 
+expense  | Qty 800.00 | MarketValue 0.00 
+expense > material purchase  | Qty 800.00 | MarketValue 0.00 
+non-financial income > incoming material steel | Qty -100.00 | MarketValue -600.00 
+non-financial income > incoming material wood | Qty -150.00 | MarketValue 0.00 
+non-financial income steel | Qty -100.00 | MarketValue -600.00 
+non-financial income wood | Qty -150.00 | MarketValue 0.00 
+closing db
