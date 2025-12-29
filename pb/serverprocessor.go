@@ -1,6 +1,7 @@
 package inventorypb
 
 import (
+	"errors"
 	"inventory"
 	"inventoryrpc"
 
@@ -31,14 +32,24 @@ func StrsContains(strs []string, searchVal string) bool {
 }
 
 type ServerProcessor struct {
-	ProcessingChan                 chan *inventoryrpc.Packet
-	ConsumeProcessingResponseFuncs []ConsumeProcessingResponseFunc
 }
 
 func NewServerProcessor() *ServerProcessor {
-	return &ServerProcessor{
-		ProcessingChan: make(chan *inventoryrpc.Packet),
+	return &ServerProcessor{}
+}
+
+func (p *ServerProcessor) Process(data any) (any, error) {
+	pkts, ok := data.([]*inventoryrpc.Packet)
+	if !ok {
+		return nil, errors.New("invalid ServerProcessor input")
 	}
+	spOuts := []*ServerProcessorOutput{}
+	for i := range pkts {
+		spOut := &ServerProcessorOutput{}
+		spOut.Packet, spOut.Message, spOut.Code, spOut.Err = p.ProcessPkt(pkts[i])
+		spOuts = append(spOuts, spOut)
+	}
+	return spOuts, nil
 }
 
 func (p *ServerProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Packet, string, int32, error) {
@@ -186,17 +197,17 @@ func (p *ServerProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Pa
 	return CreateRespPkt(pkt.UUID, 0, payload, nil, "ok")
 }
 
-func (p *ServerProcessor) PostProcessPkt(responsePkt *inventoryrpc.Packet) error {
-	responsePktPb := NewPacket(responsePkt)
-	responsePktByte, err := proto.Marshal(responsePktPb)
-	if err != nil {
-		return err
-	}
-	for _, consumeFunc := range p.ConsumeProcessingResponseFuncs {
-		consumeFunc(responsePktByte)
-	}
-	return nil
-}
+//func (p *ServerProcessor) PostProcessPkt(responsePkt *inventoryrpc.Packet) error {
+//	responsePktPb := NewPacket(responsePkt)
+//	responsePktByte, err := proto.Marshal(responsePktPb)
+//	if err != nil {
+//		return err
+//	}
+//	for _, consumeFunc := range p.ConsumeProcessingResponseFuncs {
+//		consumeFunc(responsePktByte)
+//	}
+//	return nil
+//}
 
 // func (p *ServerProcessor) Process() error {
 // 	for pkt := range p.ProcessingChan {

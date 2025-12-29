@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -27,10 +28,39 @@ var (
 	steelItem, woodItem, widget1Item, widget2Item uuid.UUID
 )
 
-var serverPktReceiver *inventorypb.PacketReceiver
-var serverProcessor *inventorypb.ServerProcessor
-var clientPktReceiver *inventorypb.PacketReceiver
+var serverPktUnwrapper *inventorypb.PipelineElement
+var serverProcessor *inventorypb.PipelineElement
+var serverToClient *inventorypb.PipelineElement
+var clientPktUnwrapper *inventorypb.PipelineElement
+var clientProcessorEl *inventorypb.PipelineElement
 var clientProcessor *ClientProcessor
+
+type ServerToClient struct{}
+
+func (p *ServerToClient) Process(data any) (any, error) {
+	srvOuts, ok := data.([]*inventorypb.ServerProcessorOutput)
+	if !ok {
+		return nil, errors.New("invalid ServerToClient input")
+	}
+	pktWrappers := []byte{}
+	for _, o := range srvOuts {
+		pktPb := inventorypb.NewPacket(o.Packet)
+		pktBytes, err := proto.Marshal(pktPb)
+		if err != nil {
+			return nil, err
+		}
+		pktWrapper, err := inventoryrpc.EncodePacketWrapper(pktBytes)
+		if err != nil {
+			return nil, err
+		}
+		pktWrappers = append(pktWrappers, pktWrapper...)
+	}
+	return pktWrappers, nil
+	//Packet  *inventoryrpc.Packet
+	//Message string
+	//Code    int32
+	//Err     error
+}
 
 type ClientProcessor struct {
 	PktChan chan *inventoryrpc.Packet
@@ -42,13 +72,19 @@ func NewClientProcessor() *ClientProcessor {
 	}
 }
 
+func (p *ClientProcessor) Process(data any) (any, error) {
+	pkts, ok := data.([]*inventoryrpc.Packet)
+	if !ok {
+		return nil, errors.New("invalid")
+	}
+	for _, pkt := range pkts {
+		p.ProcessPkt(pkt)
+	}
+	return nil, nil
+}
 func (p *ClientProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Packet, string, int32, error) {
 	p.PktChan <- pkt
 	return nil, "", -1, nil
-}
-
-func (p *ClientProcessor) PostProcessPkt(responsePkt *inventoryrpc.Packet) error {
-	return nil
 }
 
 var mainAccountUUIDBytes = map[string][]byte{}
@@ -77,7 +113,7 @@ func sendReqAndWaitResponse(funcName string, params protoreflect.ProtoMessage) (
 	if err != nil {
 		return nil, err
 	}
-	serverPktReceiver.HandleIncoming(pktWrapper)
+	serverPktUnwrapper.ProcessThenPass(pktWrapper)
 	return waitResponse(pktUUID)
 }
 
@@ -239,20 +275,27 @@ func createAccountsAndItems() error {
 }
 
 func main() {
-	serverProcessor = inventorypb.NewServerProcessor()
-	serverPktReceiver = inventorypb.NewPacketReceiver()
-	serverPktReceiver.Processor = serverProcessor
-	serverProcessor.ConsumeProcessingResponseFuncs = append(serverProcessor.ConsumeProcessingResponseFuncs, func(pktBytes []byte) {
-		pktWrapper, err := inventoryrpc.EncodePacketWrapper(pktBytes)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			return
-		}
-		clientPktReceiver.HandleIncoming(pktWrapper)
-	})
+	serverPktUnwrapper = &inventorypb.PipelineElement{
+		Processor: &inventorypb.PktUnwrapperProcessor{},
+	}
+	serverProcessor = &inventorypb.PipelineElement{
+		Processor: &inventorypb.ServerProcessor{},
+	}
+	serverToClient = &inventorypb.PipelineElement{
+		Processor: &ServerToClient{},
+	}
+	clientPktUnwrapper = &inventorypb.PipelineElement{
+		Processor: &inventorypb.PktUnwrapperProcessor{},
+	}
 	clientProcessor = NewClientProcessor()
-	clientPktReceiver = inventorypb.NewPacketReceiver()
-	clientPktReceiver.Processor = clientProcessor
+	clientProcessorEl = &inventorypb.PipelineElement{
+		Processor: clientProcessor,
+	}
+
+	serverPktUnwrapper.Sinks = []*inventorypb.PipelineElement{serverProcessor}
+	serverProcessor.Sinks = []*inventorypb.PipelineElement{serverToClient}
+	serverToClient.Sinks = []*inventorypb.PipelineElement{clientPktUnwrapper}
+	clientPktUnwrapper.Sinks = []*inventorypb.PipelineElement{clientProcessorEl}
 
 	var err error
 

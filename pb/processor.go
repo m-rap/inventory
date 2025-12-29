@@ -5,19 +5,71 @@ import (
 	"errors"
 	"fmt"
 	"inventoryrpc"
-	"log"
-	"os"
-	"sync"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 )
+
+type IProcessor interface {
+	Process(data any) (any, error)
+}
+
+type PipelineElement struct {
+	Processor IProcessor
+	Sinks     []*PipelineElement
+}
+
+func (c *PipelineElement) ProcessThenPass(data any) error {
+	processed, err := c.Processor.Process(data)
+	if err != nil {
+		return err
+	}
+	for _, s := range c.Sinks {
+		err = s.ProcessThenPass(processed)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func UnmarshalPkt(receivedPktBin []byte) (*inventoryrpc.Packet, error) {
 	var receivedPkt Packet
 	err := proto.Unmarshal(receivedPktBin, &receivedPkt)
 
 	return ToInvPacket(&receivedPkt), err
+}
+
+type PktUnwrapperProcessor struct {
+	PacketBuffer inventoryrpc.PacketBuffer
+}
+
+func (p *PktUnwrapperProcessor) Process(data any) (any, error) {
+	incomingBytes, ok := data.([]byte)
+	if !ok {
+		return nil, errors.New("invalid PktUnwrapperProcessor input")
+	}
+	packetWrappers, err := p.PacketBuffer.Feed(incomingBytes)
+	if err != nil {
+		return nil, err
+	}
+	receivedPkts := []*inventoryrpc.Packet{}
+	for pwIdx := range packetWrappers {
+		receivedPktBin := packetWrappers[pwIdx].PacketBytes
+		receivedPkt, err := UnmarshalPkt(receivedPktBin)
+		if err != nil {
+			return nil, err
+		}
+		receivedPkts = append(receivedPkts, receivedPkt)
+	}
+	return receivedPkts, nil
+}
+
+type ServerProcessorOutput struct {
+	Packet  *inventoryrpc.Packet
+	Message string
+	Code    int32
+	Err     error
 }
 
 // type ResponsePktBody struct {
@@ -85,60 +137,4 @@ func CreateRespPktErrUnmarshall(UUID uuid.UUID, err error) (*inventoryrpc.Packet
 
 func CreateRespPktErrExecFunc(UUID uuid.UUID, err error) (*inventoryrpc.Packet, string, int32, error) {
 	return CreateRespPkt(UUID, -102, nil, err, "error execute function: %s", err.Error())
-}
-
-type ConsumeProcessingResponseFunc func(responsePktByte []byte)
-
-type ProcessorInterface interface {
-	ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Packet, string, int32, error)
-	PostProcessPkt(responsePkt *inventoryrpc.Packet) error
-}
-
-type PacketReceiver struct {
-	PacketBuffer      inventoryrpc.PacketBuffer
-	PktBeingProcessed map[uuid.UUID]*inventoryrpc.Packet
-	Mutex             sync.Mutex
-	Processor         ProcessorInterface
-}
-
-func NewPacketReceiver() *PacketReceiver {
-	return &PacketReceiver{
-		PktBeingProcessed: map[uuid.UUID]*inventoryrpc.Packet{},
-	}
-}
-
-func (p *PacketReceiver) HandleIncoming(incomingBytes []byte) error {
-	if p.Processor == nil {
-		return ErrNoProcessor
-	}
-	packetWrappers, err := p.PacketBuffer.Feed(incomingBytes)
-	if err != nil {
-		return err
-	}
-	for pwIdx := range packetWrappers {
-		receivedPktBin := packetWrappers[pwIdx].PacketBytes
-		receivedPkt, err := UnmarshalPkt(receivedPktBin)
-		if err != nil {
-			log.Fatal(err)
-		}
-		p.Mutex.Lock()
-		p.PktBeingProcessed[receivedPkt.UUID] = receivedPkt
-		p.Mutex.Unlock()
-
-		go func() {
-			responsePkt, message, _, err := p.Processor.ProcessPkt(receivedPkt)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, message)
-			}
-			err = p.Processor.PostProcessPkt(responsePkt)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, err.Error())
-			}
-
-			p.Mutex.Lock()
-			delete(p.PktBeingProcessed, receivedPkt.UUID)
-			p.Mutex.Unlock()
-		}()
-	}
-	return nil
 }
