@@ -75,7 +75,7 @@ func NewClientProcessor() *ClientProcessor {
 func (p *ClientProcessor) Process(data any) (any, error) {
 	pkts, ok := data.([]*inventoryrpc.Packet)
 	if !ok {
-		return nil, errors.New("invalid")
+		return nil, errors.New("invalid ClientProcessor input")
 	}
 	for _, pkt := range pkts {
 		p.ProcessPkt(pkt)
@@ -83,6 +83,7 @@ func (p *ClientProcessor) Process(data any) (any, error) {
 	return nil, nil
 }
 func (p *ClientProcessor) ProcessPkt(pkt *inventoryrpc.Packet) (*inventoryrpc.Packet, string, int32, error) {
+	//fmt.Printf("notify pkt chan %v\n", pkt.UUID)
 	p.PktChan <- pkt
 	return nil, "", -1, nil
 }
@@ -91,6 +92,7 @@ var mainAccountUUIDBytes = map[string][]byte{}
 var mainAccountUUIDs = map[string]uuid.UUID{}
 
 func waitResponse(pktUUID uuid.UUID) (*inventoryrpc.Packet, error) {
+	//fmt.Printf("wait pkt chan %v\n", pktUUID)
 	responsePkt := <-clientProcessor.PktChan
 	responseCodeBytes, ok := responsePkt.Body["code"]
 	if !ok {
@@ -113,7 +115,13 @@ func sendReqAndWaitResponse(funcName string, params protoreflect.ProtoMessage) (
 	if err != nil {
 		return nil, err
 	}
-	serverPktUnwrapper.ProcessThenPass(pktWrapper)
+	go func() {
+		err := serverPktUnwrapper.ProcessThenPass(pktWrapper)
+		if err != nil {
+			//return nil, err
+			fmt.Fprintln(os.Stderr, err.Error())
+		}
+	}()
 	return waitResponse(pktUUID)
 }
 

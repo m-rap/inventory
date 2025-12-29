@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"inventoryrpc"
+	reflect "reflect"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
@@ -19,11 +20,34 @@ type PipelineElement struct {
 	Sinks     []*PipelineElement
 }
 
+func GetTypeNameFromType(t reflect.Type) string {
+	if t.Kind() == reflect.Ptr {
+		return "ptr" + t.Elem().Name()
+	}
+	if t.Kind() == reflect.Slice {
+		if t.Elem().Kind() == reflect.Ptr {
+			return t.Kind().String() + GetTypeNameFromType(t.Elem())
+		}
+		return t.Kind().String() + t.Elem().Name()
+	}
+	return t.Kind().String() + t.Name()
+}
+
+func GetTypeName(d any) string {
+	if d == nil {
+		return "nil"
+	}
+	t := reflect.TypeOf(d)
+	return GetTypeNameFromType(t)
+}
+
 func (c *PipelineElement) ProcessThenPass(data any) error {
+	//fmt.Printf("enter ProcessThenPass, proc %s in %s\n", GetTypeName(c.Processor), GetTypeName(data))
 	processed, err := c.Processor.Process(data)
 	if err != nil {
 		return err
 	}
+	//fmt.Printf("out %s\n", GetTypeName(processed))
 	for _, s := range c.Sinks {
 		err = s.ProcessThenPass(processed)
 		if err != nil {
